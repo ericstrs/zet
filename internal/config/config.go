@@ -3,10 +3,12 @@ package config
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 )
+
+var ErrPathDoesNotExist = errors.New("path does not exist")
 
 type C struct {
 	Id      string `yaml:"id"`       // application name
@@ -17,25 +19,25 @@ type C struct {
 }
 
 // Init initializes a new configuration.
-func (c *C) Init() {
+func (c *C) Init() error {
 	// Find path to zet directory.
 	p, err := zetPath()
 	if err != nil {
-		log.Printf("Failed to initialize configuration file: %v.\n", err)
-		return
+		return fmt.Errorf("Failed to initialize configuration file. Couldn't resolve zet directory path: %v.\n", err)
 	}
 
 	// Find path to configuration directory.
 	d, err := dir()
 	if err != nil {
-		log.Printf("Failed to initialize configuration file: %v.\n", err)
-		return
+		return fmt.Errorf("Failed to initialize configuration file: %v.\n", err)
 	}
 
 	c.ZetDir = p
 	c.ConfDir = d
 	c.Id = `zet`
 	c.File = `config.yaml`
+
+	return nil
 }
 
 // Dir returns the user defined configuration directory. An error is
@@ -45,17 +47,29 @@ func dir() (string, error) {
 	return dir, err
 }
 
-// confPath returns the path to the configuration file.
+// ConfPath returns the path to the configuration file.
 func (c C) confPath() string {
 	return filepath.Join(c.ConfDir, c.Id, c.File)
 }
 
-// ZetPath returns the path to where the zet resides. It first checks
-// for the ZET_PATH environment variable. If the environment variable
-// is not set, it falls back to reading from a configuration file.
+// ZetPath returns and validates the path to where the zet resides. It
+// first checks for the ZET_PATH environment variable. If the
+// environment variable is not set, it falls back to reading from a
+// configuration file.
 func zetPath() (string, error) {
-	path := os.Getenv("ZET_PATH")
-	if path != "" {
+	path, ok := os.LookupEnv("ZET_PATH")
+	if ok {
+		e, err := isDir(path)
+		if err != nil {
+			return "", fmt.Errorf("Failed to validate the zet directory: %v", err)
+		}
+		if err == ErrPathDoesNotExist {
+			return "", fmt.Errorf("Specified path does not exist: %s", path)
+		}
+		if !e {
+			return "", fmt.Errorf("Path exists but is not a directory: %s", path)
+		}
+
 		// Return the path if it's found in the environment variable
 		return path, nil
 	}
