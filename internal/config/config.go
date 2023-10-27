@@ -73,5 +73,21 @@ func zetPath() (string, error) {
 		// Return the path if it's found in the environment variable
 		return path, nil
 	}
-	return path, errors.New("Zet path not found")
+
+	return path, errors.New("Config file and $ZET_PATH not found")
+}
+
+// IsDir checks if a given path exists and is a directory.
+func isDir(path string) (bool, error) {
+	// Use os.Stat to get information about the path
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, ErrPathDoesNotExist
+		}
+		// Propagate any other error
+		return false, err
+	}
+	// Use FileInfo.IsDir method to check if the path is a directory
+	return info.IsDir(), nil
 }
