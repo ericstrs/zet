@@ -28,11 +28,26 @@ type file struct {
 	dirName string // modification time
 }
 
-// TODO:
-func UpdateDB() {
+// UpdateDB initializes the database, retrieve zet state from the
+// database, and updates the database to sync the flat files and the
+// data storage.
+func UpdateDB() error {
+	db, err := Init()
+	if err != nil {
+		return fmt.Errorf("Failed to initialize database: %v.\n", err)
+	}
+	ez, err := getExistingZettels(db)
+	if err != nil {
+		return fmt.Errorf("Failed to get zettels: %v.\n", err)
+	}
+	if err := processZettels(db, ez); err != nil {
+		return fmt.Errorf("Failed to process zettels: %v.\n", err)
+	}
+	return nil
 }
 
-// Init creates the database if it doesn't exist.
+// Init creates the database if it doesn't exist and returns the
+// database connection.
 func Init() (*sqlx.DB, error) {
 	// Resolve zet database path.
 	dbPath := os.Getenv("ZET_DB_PATH")
@@ -101,7 +116,8 @@ func getExistingZettels(db *sqlx.DB) (map[string]map[string]file, error) {
 // processZettels iterates over each zettel directory and its files to
 // keep the flat files and database in sync.
 func processZettels(db *sqlx.DB, existingZettels map[string]map[string]file) error {
-	dirs, err := os.ReadDir("./zet")
+	dir := "./zet"
+	dirs, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("Error reading root directory: %v", err)
 	}
@@ -114,6 +130,7 @@ func processZettels(db *sqlx.DB, existingZettels map[string]map[string]file) err
 		}
 
 		dirName := dir.Name()
+		dirPath := filepath.Join("./zet", dirName)
 
 		// Check if this is a new or existing zettel.
 		_, exists := existingZettels[dirName]
@@ -121,12 +138,14 @@ func processZettels(db *sqlx.DB, existingZettels map[string]map[string]file) err
 		// For *new* zettels: Insert the dir and all its files (that
 		// aren't a dir) into the database.
 		if !exists {
-			// TODO: Call to func that adds dir and all its files
+			if err := addZettel(db, dirPath); err != nil {
+				log.Printf("Failed to insert a zettel: %v.\n", err)
+			}
 			continue // Move to the next directory
 		}
 
 		// For *existing* zettel, process its files.
-		err = processFiles(db, "", existingZettels)
+		err = processFiles(db, dirPath, existingZettels)
 		if err != nil {
 			return err
 		}
@@ -134,17 +153,72 @@ func processZettels(db *sqlx.DB, existingZettels map[string]map[string]file) err
 		// Mark this zettel directory as visited.
 		delete(existingZettels, dirName)
 	}
-	// TODO: Perform deletion on remaining dirs
+
+	// Perform deletion on remaining dirs
+	if err := deleteDirs(db, existingZettels); err != nil {
+		log.Printf("Failed to delete a zettel: %v.\n", err)
+	}
 
 	return nil
 }
 
 // addZettel inserts a zettel directory into the database. This is
-// peformed by inserting the zettel directory into the dirs table and
+// performed by inserting the zettel directory into the dirs table and
 // all of its files into the files table.
-func addZettel() {
-	// TODO: add dir to database
-	// TODO: add files to database
+func addZettel(db *sqlx.DB, dirPath string) error {
+	dirName := path.Base(dirPath)
+	if err := insertDir(db, dirName); err != nil {
+		return err
+	}
+
+	// Fetch files inside this directory
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		return fmt.Errorf("Error reading sub-directory: %v", err)
+	}
+	// For each file that is NOT a directory:
+	// If new file Add new files or update existing files in the database.
+	for _, file := range files {
+		if file.IsDir() { // Skip sub-directories
+			continue
+		}
+
+		fileName := file.Name()
+		info, err := file.Info()
+		if err != nil {
+			return fmt.Errorf("Error reading file info: %v", err)
+		}
+		modTime := info.ModTime()
+
+		fp := filepath.Join(dirPath, fileName)
+		contentBytes, err := os.ReadFile(fp)
+		if err != nil {
+			return err
+		}
+
+		content := string(contentBytes)
+
+		// Note: Filter out any files that are not markdown.
+		if strings.HasSuffix(fileName, ".md") {
+			err := insertFile(db, dirName, fileName, content, modTime)
+			if err != nil {
+				return fmt.Errorf("Failed to insert new file: %v", err)
+			}
+			continue
+		}
+	}
+
+	return nil
+}
+
+// InsertDir inserts a directory into the dirs database table.
+func insertDir(db *sqlx.DB, name string) error {
+	const query = `
+    INSERT INTO dirs (name)
+    VALUES ($1);
+    `
+	_, err := db.Exec(query, name)
+	return err
 }
 
 // processFiles iterates over a zettel directory and inserts new files,
@@ -268,15 +342,37 @@ func deleteFiles(db *sqlx.DB, existingFiles map[string]file) error {
 
 	// Iterate through each remaining file in the directory
 	for _, f := range existingFiles {
-		// Execute the prepared statement with the file id
 		_, err := stmt.Exec(f.id)
 		if err != nil {
 			// Log the error but continue deleting other files
 			log.Printf("Error deleting file with id %d: %v", f.id, err)
 		}
 	}
+	return nil
+}
 
-	return err
+// DeleteDirs deletes any remaining files in an existing zettels map
+// from the database. This removes directories (zettels) from the zet
+// directory.
+func deleteDirs(db *sqlx.DB, existingZettels map[string]map[string]file) error {
+	const query = `
+		DELETE FROM dirs WHERE name = $1;
+	`
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	// Iterate through each remaining directory
+	for dirName := range existingZettels {
+		_, err := stmt.Exec(dirName)
+		if err != nil {
+			// Log the error but continue deleting other directories
+			log.Printf("Error deleting file with name %s: %v", dirName, err)
+		}
+	}
+	return nil
 }
 
 // ISOtoTime converts a given ISO8601 string back to time.Time object
