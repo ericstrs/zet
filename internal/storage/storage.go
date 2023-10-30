@@ -13,19 +13,20 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	_ "modernc.org/sqlite"
 )
 
 type dir struct {
-	id   int    // unique id
-	name string // unique directory name
+	Id   int    `db:"id"`   // unique id
+	Name string `db:"name"` // unique directory name
 }
 
 type file struct {
-	id      int    // unique id
-	name    string // name of file
-	content string // contents of file
-	mtime   string // modification time
-	dirName string // modification time
+	Id      int    `db:"id"`       // unique id
+	Name    string `db:"name"`     // name of file
+	Content string `db:"content"`  // contents of file
+	Mtime   string `db:"mtime"`    // modification time
+	DirName string `db:"dir_name"` // modification time
 }
 
 // UpdateDB initializes the database, retrieve zet state from the
@@ -87,8 +88,7 @@ func Init() (*sqlx.DB, error) {
 
 // GetExistingZettels retrieves all existing zettels from the database
 // and put them into a map. It returns a map that includes each zettel
-// directory and all non-directory files. The value is the modification
-// time for each file.
+// directory and all non-directory files. The value is a file struct.
 func getExistingZettels(db *sqlx.DB) (map[string]map[string]file, error) {
 	// Map to hold existing zettels and their files from the database
 	var existingZettels = make(map[string]map[string]file)
@@ -103,11 +103,11 @@ func getExistingZettels(db *sqlx.DB) (map[string]map[string]file, error) {
 	}
 
 	for _, f := range files {
-		if _, exists := existingZettels[f.dirName]; !exists {
-			existingZettels[f.dirName] = make(map[string]file)
+		if _, exists := existingZettels[f.DirName]; !exists {
+			existingZettels[f.DirName] = make(map[string]file)
 		}
 
-		existingZettels[f.dirName][f.name] = f
+		existingZettels[f.DirName][f.Name] = f
 	}
 
 	return existingZettels, nil
@@ -256,7 +256,7 @@ func processFiles(db *sqlx.DB, dirPath string, existingZettels map[string]map[st
 		//Check if this is a new or existing file for this particular
 		//zettel.
 		f, exists := existingFiles[fileName]
-		ft, err := ISOtoTime(f.mtime)
+		ft, err := ISOtoTime(f.Mtime)
 		if err != nil {
 			return err
 		}
@@ -342,10 +342,10 @@ func deleteFiles(db *sqlx.DB, existingFiles map[string]file) error {
 
 	// Iterate through each remaining file in the directory
 	for _, f := range existingFiles {
-		_, err := stmt.Exec(f.id)
+		_, err := stmt.Exec(f.Id)
 		if err != nil {
 			// Log the error but continue deleting other files
-			log.Printf("Error deleting file with id %d: %v", f.id, err)
+			log.Printf("Error deleting file with id %d: %v", f.Id, err)
 		}
 	}
 	return nil
