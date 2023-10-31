@@ -323,16 +323,18 @@ func insertFile(tx *sqlx.Tx, dirName string, fileName string, content string, mt
 	return err
 }
 
+// UpdateFile updates a file in the database given a unique directory
+// name.
 func updateFile(tx *sqlx.Tx, dirName string, fileName string, content string, mtime time.Time) error {
 	mt := mtime.Format(time.RFC3339)
 	const query = `
     UPDATE files SET
-		name = $1, content = $2, mtime = $3, dir_name =	$4
-		WHERE id = $5
+		content = $1, mtime = $2
+		WHERE dir_name = $3 AND name = $4
     `
 	// Execute the SQL query
 	// This will insert a new row into the 'files' table with the provided values
-	_, err := tx.Exec(query, fileName, content, mt, dirName)
+	_, err := tx.Exec(query, content, mt, dirName, fileName)
 	return err
 }
 
