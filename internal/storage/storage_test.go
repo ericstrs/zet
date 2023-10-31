@@ -136,7 +136,7 @@ func ExampleGetExistingZettels() {
 	// ./20231028013045/outline.md id: 6
 }
 
-func ExampleProcessFile() {
+func ExampleProcessFile_EmptyDB() {
 	tx, err := getTestTransaction()
 	if err != nil {
 		fmt.Printf("Failed to establish database connection: %v.\n", err)
@@ -164,5 +164,40 @@ func ExampleProcessFile() {
 	}
 
 	// Output:
-	// then wot
+	// ./20231028012959/README.md id: 1
+	// ./20231028013010/README.md id: 2
+	// ./20231028013031/README.md id: 3
+	// ./20231028013031/outline.md id: 4
+}
+
+func ExampleAddZettel() {
+	tx, err := getTestTransaction()
+	if err != nil {
+		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		return
+	}
+	defer tx.Rollback()
+
+	testZetDir := filepath.Join("..", "testdata", "zet", "20231028013031")
+
+	if err := addZettel(tx, testZetDir); err != nil {
+		fmt.Printf("Failed to add zettel: %v\n", err)
+		return
+	}
+
+	// Validate zettel insertion.
+	files := []file{}
+	err = tx.Select(&files, "SELECT * FROM files WHERE dir_name = 20231028013031;")
+	if err != nil {
+		fmt.Printf("Failed to select zettel: %v\n", err)
+		return
+	}
+
+	for _, f := range files {
+		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.Id)
+	}
+
+	// Output:
+	// ./20231028013031/README.md id: 1
+	// ./20231028013031/outline.md id: 2
 }
