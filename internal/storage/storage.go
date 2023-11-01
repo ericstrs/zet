@@ -161,8 +161,8 @@ func processZettels(tx *sqlx.Tx, zetPath string, existingZettels map[string]map[
 		delete(existingZettels, dirName)
 	}
 
-	// Perform deletion on remaining dirs
-	if err := deleteDirs(tx, existingZettels); err != nil {
+	// Delete any remaining zettels
+	if err := deleteZettels(tx, existingZettels); err != nil {
 		log.Printf("Failed to delete a zettel: %v.\n", err)
 	}
 
@@ -187,11 +187,12 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	// For each file that is NOT a directory:
 	// If new file Add new files or update existing files in the database.
 	for _, file := range files {
-		if file.IsDir() { // Skip sub-directories
+		fileName := file.Name()
+		// Filter out sub-directories and files that are not markdown.
+		if !strings.HasSuffix(fileName, ".md") || file.IsDir() {
 			continue
 		}
 
-		fileName := file.Name()
 		info, err := file.Info()
 		if err != nil {
 			return fmt.Errorf("Error reading file info: %v", err)
@@ -203,17 +204,27 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 		if err != nil {
 			return err
 		}
-
 		content := string(contentBytes)
 
-		// Note: Filter out any files that are not markdown.
-		if strings.HasSuffix(fileName, ".md") {
-			err := insertFile(tx, dirName, fileName, content, modTime)
-			if err != nil {
-				return fmt.Errorf("Failed to insert new file: %v", err)
-			}
-			continue
+		err = insertFile(tx, dirName, fileName, content, modTime)
+		if err != nil {
+			return fmt.Errorf("Failed to insert new file: %v", err)
 		}
+	}
+
+	return nil
+}
+
+// DeleteZettels deletes given zettels from the database.
+func deleteZettels(tx *sqlx.Tx, existingZettels map[string]map[string]file) error {
+	// Delete the files in each dir and then delete the dir.
+	for _, filesMap := range existingZettels {
+		if err := deleteFiles(tx, filesMap); err != nil {
+			return fmt.Errorf("Failed to delete files: %v", err)
+		}
+	}
+	if err := deleteDirs(tx, existingZettels); err != nil {
+		log.Printf("Failed to delete a zettel: %v.\n", err)
 	}
 
 	return nil
@@ -250,11 +261,12 @@ func processFiles(tx *sqlx.Tx, dirPath string, existingZettels map[string]map[st
 	// For each file that is NOT a directory:
 	// If new file Add new files or update existing files in the database.
 	for _, file := range files {
-		if file.IsDir() { // Skip sub-directories
+		fileName := file.Name()
+		// Filter sub-directories and out any files that are not markdown.
+		if file.IsDir() || !strings.HasSuffix(fileName, ".md") {
 			continue
 		}
 
-		fileName := file.Name()
 		info, err := file.Info()
 		if err != nil {
 			return fmt.Errorf("Error reading file info: %v", err)
@@ -279,8 +291,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, existingZettels map[string]map[st
 
 		// If the file doesn't exist in this zettel, insert it into the
 		// database.
-		// Note: Filter out any files that are not markdown.
-		if !exists && strings.HasSuffix(fileName, ".md") {
+		if !exists {
 			err := insertFile(tx, dirName, fileName, content, modTime)
 			if err != nil {
 				return fmt.Errorf("Failed to insert new file: %v", err)
@@ -328,9 +339,8 @@ func insertFile(tx *sqlx.Tx, dirName string, fileName string, content string, mt
 func updateFile(tx *sqlx.Tx, dirName string, fileName string, content string, mtime time.Time) error {
 	mt := mtime.Format(time.RFC3339)
 	const query = `
-    UPDATE files SET
-		content = $1, mtime = $2
-		WHERE dir_name = $3 AND name = $4
+    UPDATE files SET content = $1, mtime = $2
+		WHERE dir_name = $3 AND name = $4;
     `
 	// Execute the SQL query
 	// This will insert a new row into the 'files' table with the provided values
@@ -361,7 +371,7 @@ func deleteFiles(tx *sqlx.Tx, existingFiles map[string]file) error {
 	return nil
 }
 
-// DeleteDirs deletes any remaining files in an existing zettels map
+// DeleteDirs deletes any remaining directories in an existing zettels map
 // from the database. This removes directories (zettels) from the zet
 // directory.
 func deleteDirs(tx *sqlx.Tx, existingZettels map[string]map[string]file) error {
