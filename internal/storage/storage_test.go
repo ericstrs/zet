@@ -3,6 +3,8 @@ package storage
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -136,7 +138,7 @@ func ExampleGetExistingZettels() {
 	// ./20231028013045/outline.md id: 6
 }
 
-func ExampleProcessFile_EmptyDB() {
+func ExampleProcessZettels_EmptyDB() {
 	tx, err := getTestTransaction()
 	if err != nil {
 		fmt.Printf("Failed to establish database connection: %v.\n", err)
@@ -147,6 +149,222 @@ func ExampleProcessFile_EmptyDB() {
 	testZetDir := filepath.Join("..", "testdata", "zet")
 
 	if err := processZettels(tx, testZetDir, make(map[string]map[string]file)); err != nil {
+		fmt.Printf("Failed to process zettels: %v\n", err)
+		return
+	}
+
+	// Validate zettel insertions.
+	files := []file{}
+	err = tx.Select(&files, "SELECT * FROM files;")
+	if err != nil {
+		fmt.Printf("Failed to select database zettels: %v\n", err)
+		return
+	}
+
+	for _, f := range files {
+		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.Id)
+	}
+
+	// Output:
+	// ./20231028012959/README.md id: 1
+	// ./20231028013010/README.md id: 2
+	// ./20231028013031/README.md id: 3
+	// ./20231028013031/outline.md id: 4
+}
+
+func ExampleProcessZettels_Update() {
+	tx, err := getTestTransaction()
+	if err != nil {
+		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		return
+	}
+	defer tx.Rollback()
+
+	testZetDir := filepath.Join("..", "testdata", "zet")
+	existingZettels := make(map[string]map[string]file)
+
+	// Dummy time for modification time
+	dummyTime := time.Now().Add(-86 * time.Hour).Format(time.RFC3339)
+
+	// First Zettel directory: '20231028012959' with file 'README.md'
+	existingZettels["20231028012959"] = make(map[string]file)
+	existingZettels["20231028012959"]["README.md"] = file{
+		Id:      1,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028012959",
+		Mtime:   dummyTime,
+		DirName: "20231028012959",
+	}
+
+	// Second Zettel directory: '20231028013010' with file 'README.md'
+	existingZettels["20231028013010"] = make(map[string]file)
+	existingZettels["20231028013010"]["README.md"] = file{
+		Id:      2,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028013010",
+		Mtime:   dummyTime,
+		DirName: "20231028013010",
+	}
+
+	// Third Zettel directory: '20231028013031' with files 'README.md' and 'outline.md'
+	existingZettels["20231028013031"] = make(map[string]file)
+	existingZettels["20231028013031"]["README.md"] = file{
+		Id:      3,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028013031",
+		Mtime:   dummyTime,
+		DirName: "20231028013031",
+	}
+	existingZettels["20231028013031"]["outline.md"] = file{
+		Id:      4,
+		Name:    "outline.md",
+		Content: "Content for outline.md in 20231028013031",
+		Mtime:   dummyTime,
+		DirName: "20231028013031",
+	}
+
+	const query = `
+    INSERT INTO files (name, content, mtime, dir_name)
+    VALUES ($1, $2, $3, $4);
+    `
+
+	// Iterate through each directory
+	for _, filesMap := range existingZettels {
+		// Iterate through each file in the directory
+		for _, f := range filesMap {
+			// Execute the SQL query
+			// This will insert a new row into the 'files' table with the provided values
+			_, err := tx.Exec(query, f.Name, f.Content, f.Mtime, f.DirName)
+			if err != nil {
+				fmt.Printf("Failed to insert existing files: %v\n", err)
+				return
+			}
+		}
+	}
+
+	if err := processZettels(tx, testZetDir, existingZettels); err != nil {
+		fmt.Printf("Failed to process zettels: %v\n", err)
+		return
+	}
+
+	// Validate zettel insertions.
+	files := []file{}
+	err = tx.Select(&files, "SELECT * FROM files;")
+	if err != nil {
+		fmt.Printf("Failed to select database zettels: %v\n", err)
+		return
+	}
+
+	for _, f := range files {
+		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.Id)
+	}
+
+	// Output:
+	// ./20231028012959/README.md id: 1
+	// ./20231028013010/README.md id: 2
+	// ./20231028013031/README.md id: 3
+	// ./20231028013031/outline.md id: 4
+}
+
+func ExampleProcessZettels_Delete() {
+	tx, err := getTestTransaction()
+	if err != nil {
+		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		return
+	}
+	defer tx.Rollback()
+
+	testZetDir := filepath.Join("..", "testdata", "zet")
+	existingZettels := make(map[string]map[string]file)
+
+	// Dummy time for modification time
+	dummyTime := time.Now().Add(-86 * time.Hour).Format(time.RFC3339)
+
+	// First Zettel directory: '20231028012959' with file 'README.md'
+	existingZettels["20231028012959"] = make(map[string]file)
+	existingZettels["20231028012959"]["README.md"] = file{
+		Id:      1,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028012959",
+		Mtime:   dummyTime,
+		DirName: "20231028012959",
+	}
+
+	// Second Zettel directory: '20231028013010' with file 'README.md'
+	existingZettels["20231028013010"] = make(map[string]file)
+	existingZettels["20231028013010"]["README.md"] = file{
+		Id:      2,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028013010",
+		Mtime:   dummyTime,
+		DirName: "20231028013010",
+	}
+
+	// Third Zettel directory: '20231028013031' with files 'README.md',
+	// 'outline.md', and 'foo.md'.
+	existingZettels["20231028013031"] = make(map[string]file)
+	existingZettels["20231028013031"]["README.md"] = file{
+		Id:      3,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231028013031",
+		Mtime:   dummyTime,
+		DirName: "20231028013031",
+	}
+	existingZettels["20231028013031"]["outline.md"] = file{
+		Id:      4,
+		Name:    "outline.md",
+		Content: "Content for outline.md in 20231028013031",
+		Mtime:   dummyTime,
+		DirName: "20231028013031",
+	}
+	existingZettels["20231028013031"]["foo.md"] = file{
+		Id:      5,
+		Name:    "foo.md",
+		Content: "Content for foo.md in 20231028013031",
+		Mtime:   dummyTime,
+		DirName: "20231028013031",
+	}
+
+	// Fourth Zettel directory: '20231031214058' with file 'README.md'
+	existingZettels["20231031214058"] = make(map[string]file)
+	existingZettels["20231031214058"]["README.md"] = file{
+		Id:      6,
+		Name:    "README.md",
+		Content: "Content for README.md in 20231031214058",
+		Mtime:   dummyTime,
+		DirName: "20231031214058",
+	}
+
+	const query = `
+    INSERT INTO files (name, content, mtime, dir_name)
+    VALUES ($1, $2, $3, $4);
+    `
+
+	// Create an array to hold all files before inserting them into the database
+	var allFiles []file
+
+	// Collect all files from existingZettels into the allFiles slice
+	for _, filesMap := range existingZettels {
+		for _, f := range filesMap {
+			allFiles = append(allFiles, f)
+		}
+	}
+
+	// Sort the allFiles slice by Id
+	sort.Slice(allFiles, func(i, j int) bool {
+		return allFiles[i].Id < allFiles[j].Id
+	})
+
+	for _, f := range allFiles {
+		// This will insert a new row into the 'files' table with the provided values
+		_, err := tx.Exec(query, f.Name, f.Content, f.Mtime, f.DirName)
+		if err != nil {
+			fmt.Printf("Failed to insert existing files: %v\n", err)
+			return
+		}
+	}
+
+	if err := processZettels(tx, testZetDir, existingZettels); err != nil {
 		fmt.Printf("Failed to process zettels: %v\n", err)
 		return
 	}
@@ -200,4 +418,35 @@ func ExampleAddZettel() {
 	// Output:
 	// ./20231028013031/README.md id: 1
 	// ./20231028013031/outline.md id: 2
+}
+
+func ExampleProcessFiles_EmptyDB() {
+	tx, err := getTestTransaction()
+	if err != nil {
+		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		return
+	}
+	defer tx.Rollback()
+
+	testZetDir := filepath.Join("..", "testdata", "zet", "20231028013031")
+
+	if err := processFiles(tx, testZetDir, make(map[string]map[string]file)); err != nil {
+		fmt.Printf("Failed to process zettel files: %v\n", err)
+		return
+	}
+
+	// Validate zettel insertion.
+	files := []file{}
+	err = tx.Select(&files, "SELECT * FROM files WHERE dir_name = 20231028013031;")
+	if err != nil {
+		fmt.Printf("Failed to select zettel: %v\n", err)
+		return
+	}
+
+	for _, f := range files {
+		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.Id)
+	}
+
+	// Output:
+	// Failed to process zettel files: Failed to process files in ../testdata/zet/20231028013031: Directory doesn't exist.
 }
