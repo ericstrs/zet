@@ -118,8 +118,8 @@ func preferredEditor() (string, error) {
 
 	// Check if any of the fallback editors are available
 	for _, editor := range fallbacks {
-		if hasCmd(editor) {
-			return editor, nil
+		if p, okay := hasCmd(editor); okay {
+			return p, nil
 		}
 	}
 
@@ -128,7 +128,7 @@ func preferredEditor() (string, error) {
 }
 
 // HasCmd checks if a command is available on the system.
-func hasCmd(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
+func hasCmd(name string) (string, bool) {
+	p, err := exec.LookPath(name)
+	return p, err == nil
 }
