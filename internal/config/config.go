@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -14,28 +15,39 @@ type C struct {
 	Id      string `yaml:"id"`       // application name
 	ConfDir string `yaml:"conf_dir"` // os.UserConfigDir
 	File    string `yaml:"file"`     // config.yaml
+	Editor  string `yaml:"editor"`   // user's preferred editor
 
 	ZetDir string `yaml:"zet_dir"` // directory where zet resides
 }
 
 // Init initializes a new configuration.
 func (c *C) Init() error {
+	e, err := preferredEditor()
+	if err != nil {
+		return fmt.Errorf(
+			"%v. Please install a text editor or set the 'VISUAL' or 'EDITOR' "+
+				"environment variable to your preferred editor.",
+			err,
+		)
+	}
+
 	// Find path to zet directory.
 	p, err := zetPath()
 	if err != nil {
-		return fmt.Errorf("Failed to initialize configuration file. Couldn't resolve zet directory path: %v.\n", err)
+		return fmt.Errorf("Couldn't resolve zet directory path: %v", err)
 	}
 
 	// Find path to configuration directory.
 	d, err := dir()
 	if err != nil {
-		return fmt.Errorf("Failed to initialize configuration file: %v.\n", err)
+		return fmt.Errorf("Couldn't resolve user config directory: %v", err)
 	}
 
 	c.ZetDir = p
 	c.ConfDir = d
 	c.Id = `zet`
 	c.File = `config.yaml`
+	c.Editor = e
 
 	return nil
 }
@@ -90,4 +102,33 @@ func isDir(path string) (bool, error) {
 	}
 	// Use FileInfo.IsDir method to check if the path is a directory
 	return info.IsDir(), nil
+}
+
+// PreferredEditor returns the user's preferred editor based the priority:
+func preferredEditor() (string, error) {
+	if visual := os.Getenv("VISUAL"); visual != "" {
+		return visual, nil
+	}
+	if editor := os.Getenv("EDITOR"); editor != "" {
+		return editor, nil
+	}
+
+	// List of fallback editors
+	fallbacks := []string{"code", "vim", "vi", "emacs", "nano"}
+
+	// Check if any of the fallback editors are available
+	for _, editor := range fallbacks {
+		if hasCmd(editor) {
+			return editor, nil
+		}
+	}
+
+	// If none are available, return an error
+	return "", errors.New("No text editor found")
+}
+
+// HasCmd checks if a command is available on the system.
+func hasCmd(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }
