@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/iuiq/zet"
 	"github.com/iuiq/zet/internal/config"
 )
 
@@ -34,7 +33,7 @@ func TitleCmd(args []string) error {
 
 	switch n {
 	case 2: // no args, use pwd as path
-		p, ok, err := zet.InZettel()
+		p, ok, err := InZettel()
 		if err != nil {
 			return fmt.Errorf("Failed to check if user is in a zettel: %v", err)
 		}
