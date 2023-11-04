@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-var ErrPathDoesNotExist = errors.New("path does not exist")
+var errPathDoesNotExist = errors.New("path does not exist")
 
 type C struct {
 	Id      string `yaml:"id"`       // application name
@@ -32,7 +32,7 @@ func (c *C) Init() error {
 	}
 
 	// Find path to zet directory.
-	p, err := zetPath()
+	p, err := zetDir()
 	if err != nil {
 		return fmt.Errorf("Couldn't resolve zet directory path: %v", err)
 	}
@@ -64,29 +64,28 @@ func (c C) confPath() string {
 	return filepath.Join(c.ConfDir, c.Id, c.File)
 }
 
-// ZetPath returns and validates the path to where the zet resides. It
-// first checks for the ZET_PATH environment variable. If the
+// ZetDir returns and validates the path to where the zet resides. It
+// first checks for the ZET_DIR environment variable. If the
 // environment variable is not set, it falls back to reading from a
 // configuration file.
-func zetPath() (string, error) {
-	path, ok := os.LookupEnv("ZET_PATH")
+func zetDir() (string, error) {
+	path, ok := os.LookupEnv("ZET_DIR")
 	if ok {
 		e, err := isDir(path)
 		if err != nil {
 			return "", fmt.Errorf("Failed to validate the zet directory: %v", err)
 		}
-		if err == ErrPathDoesNotExist {
+		if err == errPathDoesNotExist {
 			return "", fmt.Errorf("Specified path does not exist: %s", path)
 		}
 		if !e {
 			return "", fmt.Errorf("Path exists but is not a directory: %s", path)
 		}
 
-		// Return the path if it's found in the environment variable
 		return path, nil
 	}
 
-	return path, errors.New("Config file and $ZET_PATH not found")
+	return path, errors.New("Config file and $ZET_DIR not found")
 }
 
 // IsDir checks if a given path exists and is a directory.
@@ -95,12 +94,10 @@ func isDir(path string) (bool, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, ErrPathDoesNotExist
+			return false, errPathDoesNotExist
 		}
-		// Propagate any other error
 		return false, err
 	}
-	// Use FileInfo.IsDir method to check if the path is a directory
 	return info.IsDir(), nil
 }
 
