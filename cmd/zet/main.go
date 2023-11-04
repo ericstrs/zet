@@ -13,18 +13,22 @@ Commands:
 	search - Searches for zettels given a query string.
 	merge  - Merges linked notes to form a single note.
 	list   - Lists all existing zettels.
+	title  - Prints the title of a zettel file.
+	link   - Prints the link of a zettel.
+	isosec - Prints the current ISO date to the millisecond.
+
+Appending "help" after any command will print command info.
 */
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	z "github.com/iuiq/zet"
-	"github.com/iuiq/zet/internal/config"
+	"github.com/iuiq/zet/internal/meta"
 )
 
 const usage = `Usage:
@@ -37,7 +41,13 @@ Commands:
   remove - Removes a zettel by its ID.
   search - Searches for zettels given a query string.
   merge  - Merges linked notes to form a single note.
-  list   - Lists all existing zettels.`
+  list   - Lists all existing zettels.
+  title  - Prints the title of a zettel file.
+  link   - Prints the link of a zettel.
+  isosec - Prints the current ISO date to the millisecond.
+
+Appending "help" after any command will print command info.
+`
 
 func main() {
 	if err := Run(); err != nil {
@@ -52,57 +62,20 @@ func Run() error {
 	}
 
 	switch strings.ToLower(os.Args[1]) {
-	case "add": // add a new zettel
-		if err := addCmd(args); err != nil {
+	case `add`: // add a new zettel
+		if err := z.AddCmd(args); err != nil {
 			return fmt.Errorf("Failed to add a zettel: %v", err)
+		}
+	case `title`: // get zettel title
+		if err := meta.TitleCmd(args); err != nil {
+			return fmt.Errorf("Failed to retrieve zettel title: %v", err)
+		}
+	case `link`: // get zettel link
+		if err := meta.LinkCmd(args); err != nil {
+			return fmt.Errorf("Failed to retrieve zettel link: %v", err)
 		}
 	default:
 		return fmt.Errorf("Invalid argument.\n%s", usage)
-	}
-
-	return nil
-}
-
-func addCmd(args []string) error {
-	c := new(config.C)
-	if err := c.Init(); err != nil {
-		return fmt.Errorf("Failed to initialize configuration file: %v", err)
-	}
-
-	var title, body, stdin string
-
-	// Assign title and body based on positional arguments
-	if len(args) > 2 {
-		title = args[2]
-	}
-
-	if len(args) > 3 {
-		body = args[3]
-	}
-
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return fmt.Errorf("Failed to get info on stdin: %v", err)
-	}
-
-	// If the Stdin is from a pipe
-	if (fi.Mode() & os.ModeCharDevice) == 0 {
-		scanner := bufio.NewScanner(os.Stdin)
-
-		// Read stdin content, if available
-		for scanner.Scan() {
-			line := scanner.Text()
-			stdin += line + "\n"
-		}
-		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("Error reading from stdin: %v", err)
-		}
-		// Remove the last newline character from stdin
-		stdin = strings.TrimSuffix(stdin, "\n")
-	}
-
-	if err := z.Add(c.ZetDir, c.Editor, title, body, stdin); err != nil {
-		return err
 	}
 
 	return nil
