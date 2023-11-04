@@ -3,10 +3,10 @@ package meta
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/iuiq/zet"
 	"github.com/iuiq/zet/internal/config"
 )
 
@@ -19,7 +19,7 @@ Usage:
 `
 
 // linkFormat is the format for a zettel link. It should take the form
-// `[dir](../dir/) title`
+// `* [dir](../dir/) title`
 var linkFormat = "* [%s](../%s/) %s"
 
 // LinkCmd parses and validates user arguments for the link command.
@@ -62,7 +62,7 @@ func LinkCmd(args []string) error {
 func CurrLink() (string, error) {
 	var l string
 	// Get path to zettel directory and ensure user is in a zettel.
-	p, ok, err := zet.InZettel()
+	p, ok, err := InZettel()
 	if err != nil {
 		return "", fmt.Errorf("Failed to check if user is in a zettel: %v", err)
 	}
@@ -103,4 +103,20 @@ func zettelDir(path string) (string, error) {
 	}
 	name := filepath.Base(path)
 	return name, nil
+}
+
+// InZettel checks if the user is in a zettel. The current directory and
+// whether or not user is in a zettel is returned.
+func InZettel() (string, bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	// Get the path to parent directory of the current working directory.
+	parentDir := filepath.Dir(cwd)
+
+	// Check if the parent directory's path base name is 'zet'
+	isZettel := filepath.Base(parentDir) == "zet"
+	return cwd, isZettel, nil
 }
