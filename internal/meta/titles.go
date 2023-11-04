@@ -21,8 +21,8 @@ Usage:
 	zet title [isosec] - Prints the title for the zettel file in isosec dir.
 `
 
-// TitleCmd parses and validates user arguments. If arguments are valid,
-// it calls the desired operation.
+// TitleCmd parses and validates user arguments for the title command.
+// If arguments are valid, it calls the desired operation.
 func TitleCmd(args []string) error {
 	var t string
 	var err error
