@@ -12,16 +12,17 @@ import (
 )
 
 var errPathDoesNotExist = errors.New("path does not exist")
-var titleUsage = `title prints the title of the zettel file.
+var titleUsage = `title prints title of the zettel file.
 
 Usage:
 
-	zet title          - Prints the title for the zettel file in current dir.
-	zet title [isosec] - Prints the title for the zettel file in isosec dir.
+	zet title          - Prints title for the zettel file in current dir.
+	zet title [isosec] - Prints title for the zettel file in isosec dir.
 `
 
 // TitleCmd parses and validates user arguments for the title command.
-// If arguments are valid, it calls the desired operation.
+// If arguments are valid, it calls the desired operation. If not enough
+// arguments, the exit with non-zero status code.
 func TitleCmd(args []string) error {
 	var t string
 	var err error
@@ -54,9 +55,6 @@ func TitleCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-	default:
-		fmt.Println(titleUsage)
-		return nil
 	}
 
 	fmt.Println(t)

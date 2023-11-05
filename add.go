@@ -17,13 +17,13 @@ import (
 
 var Perm = 0700
 var errNotInZettel = errors.New("not in a zettel")
-var addUsage = `add adds a new zettel with the given title and content
+var addUsage = `add adds a new zettel with the given title and content.
 
 Usage:
 
-	zet add                - Creates a new zettel and opens it for editing.
-	zet add [title]        - Creates a new zettel with provided title.
-	zet add [title] [body] - Creates a new zettel with provided title and body.
+  zet add                - Adds new zettel and opens for editing.
+  zet add [title]        - Adds new zettel with provided title.
+  zet add [title] [body] - Adds new zettel with provided title and body.
 
 All the above scenarios accept standard input. In which, content from
 Stdin is always appended after any argument data. Providing non-empty
@@ -31,22 +31,17 @@ Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
 
 Auto-linking is enabled by default. If calling the add command from
 an existing zettel directory, the newly created zettel will have link
-to existing zettel.
-`
+to existing zettel.`
 
 // AddCmd parses and validates user arguments for the add command.
 // If arguments are valid, it calls the desired operation.
 func AddCmd(args []string) error {
-	n := len(args)
-	if n < 3 {
-		fmt.Println(addUsage)
-		return nil
-	}
 	var title, body, stdin string
 	c := new(config.C)
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
+	n := len(args)
 
 	// Assign title and body based on positional arguments
 	if n > 2 {

@@ -10,12 +10,12 @@ import (
 	"github.com/iuiq/zet/internal/config"
 )
 
-var linkUsage = `link prints the link of a zettel.
+var linkUsage = `link prints link of the zettel file.
 
 Usage:
 
-	zet link          - Prints the zettel link for the current dir.
-	zet link [isosec] - Prints the zettel link for the given dir isosec.
+	zet link          - Prints zettel link for the current dir.
+	zet link [isosec] - Prints zettel link for the given dir isosec.
 `
 
 // linkFormat is the format for a zettel link. It should take the form
@@ -49,8 +49,7 @@ func LinkCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-	default:
-		fmt.Println(linkUsage)
+
 		return nil
 	}
 
