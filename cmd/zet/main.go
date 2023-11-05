@@ -58,7 +58,9 @@ func main() {
 func Run() error {
 	args := os.Args
 	if len(args) == 1 {
-		return fmt.Errorf("Not enough arguments.\n%s", usage)
+		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
+		fmt.Fprintf(os.Stderr, usage)
+		os.Exit(1)
 	}
 
 	switch strings.ToLower(os.Args[1]) {
