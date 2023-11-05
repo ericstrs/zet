@@ -17,11 +17,31 @@ import (
 
 var Perm = 0700
 var errNotInZettel = errors.New("not in a zettel")
+var addUsage = `add adds a new zettel with the given title and content
+
+Usage:
+
+	zet add                - Creates a new zettel and opens it for editing.
+	zet add [title]        - Creates a new zettel with provided title.
+	zet add [title] [body] - Creates a new zettel with provided title and body.
+
+All the above scenarios accept standard input. In which, content from
+Stdin is always appended after any argument data. Providing non-empty
+Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
+
+Auto-linking is enabled by default. If calling the add command from
+an existing zettel directory, the newly created zettel will have link
+to existing zettel.
+`
 
 // AddCmd parses and validates user arguments for the add command.
 // If arguments are valid, it calls the desired operation.
-// TODO: add `help` sub-command. Check args and print usage.
 func AddCmd(args []string) error {
+	n := len(args)
+	if n < 3 {
+		fmt.Println(addUsage)
+		return nil
+	}
 	var title, body, stdin string
 	c := new(config.C)
 	if err := c.Init(); err != nil {
@@ -29,10 +49,14 @@ func AddCmd(args []string) error {
 	}
 
 	// Assign title and body based on positional arguments
-	if len(args) > 2 {
+	if n > 2 {
+		if strings.ToLower(args[2]) == `help` {
+			fmt.Println(addUsage)
+			return nil
+		}
 		title = args[2]
 	}
-	if len(args) > 3 {
+	if n > 3 {
 		body = args[3]
 	}
 
@@ -42,9 +66,8 @@ func AddCmd(args []string) error {
 	}
 	// If the Stdin is from a pipe
 	if (fi.Mode() & os.ModeCharDevice) == 0 {
-		scanner := bufio.NewScanner(os.Stdin)
-
 		// Read stdin content, if available
+		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			line := scanner.Text()
 			stdin += line + "\n"
@@ -80,18 +103,13 @@ func AddCmd(args []string) error {
 //     * Creates a new zettel with the provided title and body.
 //     * Does not open the zettel for editing.
 //
-// All the above scenarios can be used along with stdin. In which, the
-// content from stdin is always appended after any argument data.
+// All the above scenarios accept standard input. In which, content from
+// Stdin is always appended after any argument data. Providing non-empty
+// Stdin alongside `zet add` disables the interactive feature.
 //
-// Auto-linking is enabled by default. If user is in a zettel, then
-// adding will result in appending the current zettels link in the newly
-// created zettel. This does not create a link for the current zettel.
-// After the new zettel has a title and been saved, its link can be
-// retrieved by doing `zet link last` from the current zettel.
-//
-// TODO:
-// * smart modification detection where a git commit is made if file was
-// modified.
+// Auto-linking is enabled by default. If calling the add command from
+// an existing zettel directory, the newly created zettel will have link
+// to existing zettel.
 func Add(path, editor, title, body, stdin string) error {
 	// Create new directory using the current isosec
 	is := Isosec()
@@ -140,8 +158,8 @@ func Add(path, editor, title, body, stdin string) error {
 		return fmt.Errorf("Failed write buffered data to new zettel %s: %v", zfpath, err)
 	}
 
-	// If there was no title or body arguments, open newly created zettel.
-	if title == "" && body == "" {
+	// If no title and no body and no stdin, then open newly created zettel.
+	if title == "" && body == "" && stdin == "" {
 		if err := openFile(editor, zfpath); err != nil {
 			return fmt.Errorf("Failed to open new zettel: %v", err)
 		}
