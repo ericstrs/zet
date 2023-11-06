@@ -9,7 +9,6 @@ Usage:
 Commands:
 
 	add    - Adds a new zettel with the given title and content.
-	remove - Removes a zettel by its ID.
 	search - Searches for zettels given a query string.
 	merge  - Merges linked notes to form a single note.
 	list   - Lists all existing zettels.
@@ -39,7 +38,6 @@ const usage = `Usage:
 Commands:
 
   add    - Adds a new zettel with the given title and content.
-  remove - Removes a zettel by its ID.
   search - Searches for zettels given a query string.
   merge  - Merges linked notes to form a single note.
   list   - Lists all existing zettels.
