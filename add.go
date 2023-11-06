@@ -31,10 +31,10 @@ var addUsage = `NAME
 
 USAGE
 
-	zet add                - Adds new zettel and opens for editing.
-	zet add [title]        - Adds new zettel with provided title.
-	zet add [title] [body] - Adds new zettel with provided title and body.
-	zet add help           - Provides command information.
+	zet a|add                - Adds new zettel and opens for editing.
+	zet a|add [title]        - Adds new zettel with provided title.
+	zet a|add [title] [body] - Adds new zettel with provided title and body.
+	zet a|add help           - Provides command information.
 
 DESCRIPTION
 

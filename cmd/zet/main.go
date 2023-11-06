@@ -64,7 +64,7 @@ func Run() error {
 	}
 
 	switch strings.ToLower(os.Args[1]) {
-	case `add`: // add a new zettel
+	case `add`, `a`: // add a new zettel
 		if err := z.AddCmd(args); err != nil {
 			return fmt.Errorf("Failed to add a zettel: %v", err)
 		}
