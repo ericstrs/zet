@@ -16,6 +16,7 @@ Commands:
 	title  - Prints the title of a zettel file.
 	link   - Prints the link of a zettel.
 	isosec - Prints the current ISO date to the millisecond.
+	commit - Performs a git commit using zettel's title.
 
 Appending "help" after any command will print command info.
 */
@@ -45,8 +46,9 @@ Commands:
   title  - Prints the title of a zettel file.
   link   - Prints the link of a zettel.
   isosec - Prints the current ISO date to the millisecond.
+	commit - Performs a git commit using zettel's title.
 
-Appending "help" after any command will print command info.
+Appending "help" after any command will print more command info.
 `
 
 func main() {
@@ -76,6 +78,12 @@ func Run() error {
 		if err := meta.LinkCmd(args); err != nil {
 			return fmt.Errorf("Failed to retrieve zettel link: %v", err)
 		}
+	case `commit`:
+		if err := z.CommitCmd(args); err != nil {
+			return err
+		}
+	case `isosec`:
+		z.IsosecCmd(args)
 	default:
 		return fmt.Errorf("Invalid argument.\n%s", usage)
 	}

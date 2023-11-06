@@ -17,6 +17,12 @@ import (
 
 var Perm = 0700
 var errNotInZettel = errors.New("not in a zettel")
+var isoUsage = `isosec prints the current ISO date to the millisecond.
+
+Usage:
+
+  zet isosec      - Print current ISO date to the millisecond.
+  zet isosec help - Provides command information.`
 var addUsage = `add adds a new zettel with the given title and content.
 
 Usage:
@@ -164,8 +170,24 @@ func Add(path, editor, title, body, stdin string) error {
 	return nil
 }
 
+// IsosecCmd parses and validates user arguments for the isosec command.
+// If arguments are valid, it calls the desired operation.
+func IsosecCmd(args []string) {
+	var iso string
+	n := len(args)
+	switch n {
+	case 2:
+		iso = Isosec()
+	case 3:
+		if strings.ToLower(args[2]) == `help` {
+			fmt.Println(isoUsage)
+			return
+		}
+	}
+	fmt.Println(iso)
+}
+
 // Isosec returns the ISO date to the millisecond.
-// TODO: add info on `help` arg. Variadic func may be useful here.
 func Isosec() string {
 	t := time.Now().UTC()
 	return t.Format("20060102150405")
