@@ -14,7 +14,7 @@ import (
 var errPathDoesNotExist = errors.New("path does not exist")
 var titleUsage = `NAME
 
-title - prints title of the zettel file.
+	title - prints title of the zettel file.
 
 USAGE
 
