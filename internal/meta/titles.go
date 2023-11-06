@@ -12,13 +12,15 @@ import (
 )
 
 var errPathDoesNotExist = errors.New("path does not exist")
-var titleUsage = `title prints title of the zettel file.
+var titleUsage = `NAME
 
-Usage:
+title - prints title of the zettel file.
+
+USAGE
 
 	zet title          - Prints title for the zettel file in current dir.
 	zet title [isosec] - Prints title for the zettel file in isosec dir.
-	zet title help - Provides command information.`
+	zet title help     - Provides command information.`
 
 // TitleCmd parses and validates user arguments for the title command.
 // If arguments are valid, it calls the desired operation. If not enough

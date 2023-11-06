@@ -10,9 +10,10 @@ import (
 	"github.com/iuiq/zet/internal/config"
 )
 
-var linkUsage = `link prints link of the zettel file.
+var linkUsage = `NAME
+	link - prints zettel link
 
-Usage:
+USAGE:
 
 	zet link          - Prints zettel link for the current dir.
 	zet link [isosec] - Prints zettel link for the given dir isosec.

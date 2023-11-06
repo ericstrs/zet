@@ -13,13 +13,15 @@ import (
 	"github.com/iuiq/zet/internal/meta"
 )
 
-var commitUsage = `commit performs a git commit using zettel's title.
+var commitUsage = `NAME
 
-Usage:
+	commit - performs a git commit using zettel's title.
 
-  zet commit      - Commits the README.md file in current directory.
-  zet commit all  - Commits all modified/new README.md files.
-  zet commit help - Provides command information.`
+USAGE
+
+	zet commit      - Commits the README.md file in current directory.
+	zet commit all  - Commits all modified/new README.md files.
+	zet commit help - Provides command information.`
 
 // CommitCmd parses and validates user arguments for the commit command.
 // If arguments are valid, it calls the desired operation.

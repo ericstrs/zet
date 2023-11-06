@@ -17,28 +17,34 @@ import (
 
 var Perm = 0700
 var errNotInZettel = errors.New("not in a zettel")
-var isoUsage = `isosec prints the current ISO date to the millisecond.
+var isoUsage = `NAME
 
-Usage:
+	isosec - prints the current ISO date to the millisecond.
 
-  zet isosec      - Print current ISO date to the millisecond.
-  zet isosec help - Provides command information.`
-var addUsage = `add adds a new zettel with the given title and content.
+USAGE
 
-Usage:
+	zet isosec      - Print current ISO date to the millisecond.
+	zet isosec help - Provides command information.`
+var addUsage = `NAME
 
-  zet add                - Adds new zettel and opens for editing.
-  zet add [title]        - Adds new zettel with provided title.
-  zet add [title] [body] - Adds new zettel with provided title and body.
+	add - adds a new zettel with the given title and content.
+
+USAGE
+
+	zet add                - Adds new zettel and opens for editing.
+	zet add [title]        - Adds new zettel with provided title.
+	zet add [title] [body] - Adds new zettel with provided title and body.
 	zet add help           - Provides command information.
 
-All the above scenarios accept standard input. In which, content from
-Stdin is always appended after any argument data. Providing non-empty
-Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
+DESCRIPTION
 
-Auto-linking is enabled by default. If calling the add command from
-an existing zettel directory, the newly created zettel will have link
-to existing zettel.`
+	All the above scenarios accept standard input. In which, content from
+	Stdin is always appended after any argument data. Providing non-empty
+	Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
+
+	Auto-linking is enabled by default. If calling the add command from
+	an existing zettel directory, the newly created zettel will have link
+	to existing zettel.`
 
 // AddCmd parses and validates user arguments for the add command.
 // If arguments are valid, it calls the desired operation.
