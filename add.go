@@ -24,6 +24,7 @@ Usage:
   zet add                - Adds new zettel and opens for editing.
   zet add [title]        - Adds new zettel with provided title.
   zet add [title] [body] - Adds new zettel with provided title and body.
+	zet add help           - Provides command information.
 
 All the above scenarios accept standard input. In which, content from
 Stdin is always appended after any argument data. Providing non-empty
@@ -155,7 +156,7 @@ func Add(path, editor, title, body, stdin string) error {
 
 	// If no title and no body and no stdin, then open newly created zettel.
 	if title == "" && body == "" && stdin == "" {
-		if err := openFile(editor, zfpath); err != nil {
+		if err := runCmd(zpath, editor, zfpath); err != nil {
 			return fmt.Errorf("Failed to open new zettel: %v", err)
 		}
 	}
@@ -188,9 +189,11 @@ func file(s string) (*os.File, error) {
 	return file, nil
 }
 
-// openFile opens a file.
-func openFile(editorPath, filePath string) error {
-	cmd := exec.Command(editorPath, filePath)
+// runCmd runs an external command given the path to directory command
+// should be executed in, path to command, and command arguments.
+func runCmd(execPath, cmdPath string, args ...string) error {
+	cmd := exec.Command(cmdPath, args...)
+	cmd.Dir = execPath
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

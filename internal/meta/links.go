@@ -16,7 +16,7 @@ Usage:
 
 	zet link          - Prints zettel link for the current dir.
 	zet link [isosec] - Prints zettel link for the given dir isosec.
-`
+	zet link help     - Provides command information.`
 
 // linkFormat is the format for a zettel link. It should take the form
 // `* [dir](../dir/) title`
@@ -49,8 +49,6 @@ func LinkCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-
-		return nil
 	}
 
 	fmt.Println(l)
