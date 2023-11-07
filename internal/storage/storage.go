@@ -94,7 +94,7 @@ func Init() (*sqlx.DB, error) {
 	return db, nil
 }
 
-// GetExistingZettels retrieves all existing zettels from the database
+// getExistingZettels retrieves all existing zettels from the database
 // and put them into a map. It returns a map that includes each zettel
 // directory and all non-directory files. The value is a file struct.
 func getExistingZettels(db *sqlx.DB) (map[string]map[string]file, error) {
@@ -215,7 +215,7 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	return nil
 }
 
-// DeleteZettels deletes given zettels from the database.
+// deleteZettels deletes given zettels from the database.
 func deleteZettels(tx *sqlx.Tx, existingZettels map[string]map[string]file) error {
 	// Delete the files in each dir and then delete the dir.
 	for _, filesMap := range existingZettels {
@@ -230,7 +230,7 @@ func deleteZettels(tx *sqlx.Tx, existingZettels map[string]map[string]file) erro
 	return nil
 }
 
-// InsertDir inserts a directory into the dirs database table.
+// insertDir inserts a directory into the dirs database table.
 func insertDir(tx *sqlx.Tx, name string) error {
 	const query = `
     INSERT INTO dirs (name)
@@ -276,7 +276,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, existingZettels map[string]map[st
 		//Check if this is a new or existing file for this particular
 		//zettel.
 		f, exists := existingFiles[fileName]
-		ft, err := ISOtoTime(f.Mtime)
+		ft, err := isoToTime(f.Mtime)
 		if err != nil {
 			return err
 		}
@@ -320,7 +320,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, existingZettels map[string]map[st
 	return nil
 }
 
-// InsertFile inserts a new file into the database.
+// insertFile inserts a new file into the database.
 func insertFile(tx *sqlx.Tx, dirName string, fileName string, content string, mtime time.Time) error {
 	mt := mtime.Format(time.RFC3339)
 	const query = `
@@ -334,7 +334,7 @@ func insertFile(tx *sqlx.Tx, dirName string, fileName string, content string, mt
 	return err
 }
 
-// UpdateFile updates a file in the database given a unique directory
+// updateFile updates a file in the database given a unique directory
 // name.
 func updateFile(tx *sqlx.Tx, dirName string, fileName string, content string, mtime time.Time) error {
 	mt := mtime.Format(time.RFC3339)
@@ -348,7 +348,7 @@ func updateFile(tx *sqlx.Tx, dirName string, fileName string, content string, mt
 	return err
 }
 
-// DeleteFiles deletes any remaining files in an existing files map
+// deleteFiles deletes any remaining files in an existing files map
 // from the database. This removes files from a single zettel directory.
 func deleteFiles(tx *sqlx.Tx, existingFiles map[string]file) error {
 	const query = `
@@ -371,7 +371,7 @@ func deleteFiles(tx *sqlx.Tx, existingFiles map[string]file) error {
 	return nil
 }
 
-// DeleteDirs deletes any remaining directories in an existing zettels map
+// deleteDirs deletes any remaining directories in an existing zettels map
 // from the database. This removes directories (zettels) from the zet
 // directory.
 func deleteDirs(tx *sqlx.Tx, existingZettels map[string]map[string]file) error {
@@ -395,8 +395,8 @@ func deleteDirs(tx *sqlx.Tx, existingZettels map[string]map[string]file) error {
 	return nil
 }
 
-// ISOtoTime converts a given ISO8601 string back to time.Time object
-func ISOtoTime(t string) (time.Time, error) {
+// isoToTime converts a given ISO8601 string back to time.Time object
+func isoToTime(t string) (time.Time, error) {
 	mt, err := time.Parse(time.RFC3339, t)
 	if err != nil {
 		return time.Time{}, err
