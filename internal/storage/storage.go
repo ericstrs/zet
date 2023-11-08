@@ -53,8 +53,8 @@ type Link struct {
 // AllZettels returns all existing zettel files.
 func (s *Storage) AllZettels() ([]Zettel, error) {
 	const query = `SELECT * FROM zettel;`
-	const tagQuery = `SELECT tag FROM tags JOIN zettel_tags ON tags.id = zettel_tags.tag_id WHERE zettel_id = $1`
-	const linkQuery = `SELECT link FROM links WHERE zettel_id = $1`
+	const tagQuery = `SELECT name FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_id = $1`
+	const linkQuery = `SELECT content FROM link WHERE zettel_id = $1`
 	zettels := []Zettel{}
 
 	zettelRows, err := s.db.Queryx(query)
@@ -169,7 +169,7 @@ func Init() (*Storage, error) {
 			  FOREIGN KEY(zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
 			);
 
-      -- Table for storing zettel tags
+      -- Table for storing zettel tag
       CREATE TABLE IF NOT EXISTS tag (
 			  id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL
@@ -181,7 +181,7 @@ func Init() (*Storage, error) {
 				tag_id INTEGER NOT NULL,               -- ID of the tag
 				PRIMARY KEY(zettel_id, tag_id),        -- Composite primary key
 				FOREIGN KEY(zettel_id) REFERENCES zettels(id) ON DELETE CASCADE,
-				FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+				FOREIGN KEY(tag_id) REFERENCES tag(id) ON DELETE CASCADE
 			);`
 
 	_, err = db.Exec(query)
@@ -499,11 +499,11 @@ func splitZettel(content string) (string, string, []string, []string) {
 func insertFile(tx *sqlx.Tx, z Zettel) error {
 	const query = `
     INSERT INTO zettel (name, title, body, mtime, dir_name)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    VALUES ($1, $2, $3, $4, $5)
 		RETURNING id;
     `
 	var id int
-	err := tx.QueryRow(query, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(id)
+	err := tx.QueryRow(query, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(&id)
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 func updateFile(tx *sqlx.Tx, z Zettel) error {
 	const idQuery = `SELECT id FROM zettel WHERE name=$1 AND dir_name=$2`
 	var id int
-	err := tx.Get(&id, idQuery, z.DirName, z.Name)
+	err := tx.Get(&id, idQuery, z.Name, z.DirName)
 	if err != nil {
 		return fmt.Errorf("Failed to get zettel id: %v", err)
 	}
@@ -603,9 +603,7 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 // deleteFiles deletes any remaining files in an existing files map
 // from the database. This removes files from a single zettel directory.
 func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
-	const query = `
-		DELETE FROM zettel WHERE id = $1;
-	`
+	const query = `DELETE FROM zettel WHERE id = $1;`
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return err
@@ -627,9 +625,7 @@ func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
 // from the database. This removes directories (zettels) from the zet
 // directory.
 func deleteDirs(tx *sqlx.Tx, zm map[string]map[string]Zettel) error {
-	const query = `
-		DELETE FROM dir WHERE name = $1;
-	`
+	const query = `DELETE FROM dir WHERE name = $1;`
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return err
