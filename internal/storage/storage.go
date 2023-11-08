@@ -172,7 +172,7 @@ func Init() (*Storage, error) {
       -- Table for storing zettel tag
       CREATE TABLE IF NOT EXISTS tag (
 			  id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL
+        name TEXT NOT NULL UNIQUE
 			);
 
 			-- Many-to-many relationship table between zettels and tags
@@ -424,6 +424,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		// If the file has been modified since last recorded, make the
 		// database update operation.
 		if modTime.After(ft) {
+			log.Println("updating file")
 			err := updateFile(tx, z)
 			if err != nil {
 				return fmt.Errorf("Failed to update file record: %v", err)
@@ -450,7 +451,7 @@ func splitZettel(content string) (string, string, []string, []string) {
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
 	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
-	tagRegex := regexp.MustCompile(`^\t\t#[^\s]+`)
+	tagRegex := regexp.MustCompile(`^(?:\t\t| {4})#[a-zA-Z]+`)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
@@ -538,7 +539,10 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
     UPDATE zettel SET title=$1, body=$2, mtime=$3
 		WHERE id=$4;
     `
-	_, err = tx.Exec(zettelQuery, z.Title, z.Body, z.Mtime)
+	_, err = tx.Exec(zettelQuery, z.Title, z.Body, z.Mtime, id)
+	if err != nil {
+		return fmt.Errorf("Error updating zettel table record: %v", err)
+	}
 
 	// Update links - for simplicity, remove all existing links and add new ones
 	_, err = tx.Exec(`DELETE FROM link WHERE zettel_id=$1`, id)
