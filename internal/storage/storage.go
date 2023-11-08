@@ -298,7 +298,7 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 		if err != nil {
 			return fmt.Errorf("Error reading file info: %v", err)
 		}
-		modTime := info.ModTime()
+		modTime := info.ModTime().Truncate(time.Second)
 		z.Mtime = modTime.Format(time.RFC3339)
 
 		fp := filepath.Join(dirPath, z.Name)
@@ -384,7 +384,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		if err != nil {
 			return fmt.Errorf("Error reading file info: %v", err)
 		}
-		modTime := info.ModTime()
+		modTime := info.ModTime().Truncate(time.Second)
 		z.Mtime = modTime.Format(time.RFC3339)
 
 		// Check if this is a new or existing file for this particular
@@ -424,7 +424,6 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		// If the file has been modified since last recorded, make the
 		// database update operation.
 		if modTime.After(ft) {
-			log.Println("updating file")
 			err := updateFile(tx, z)
 			if err != nil {
 				return fmt.Errorf("Failed to update file record: %v", err)
