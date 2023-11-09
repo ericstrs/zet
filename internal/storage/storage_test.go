@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -65,18 +64,20 @@ func setupTestDB(db *sqlx.DB) error {
         FOREIGN KEY(dir_name) REFERENCES Directories(name) -- Reference to parent directory
       );
 
-      -- Table for storing zettel links
+			-- Table for storing zettel links
       CREATE TABLE IF NOT EXISTS link (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
-        zettel_id INTEGER NOT NULL,
-        FOREIGN KEY(zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
+        from_zettel_id INTEGER NOT NULL,
+        to_zettel_id INTEGER NOT NULL,
+        FOREIGN KEY(from_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
+        FOREIGN KEY(to_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
       );
 
       -- Table for storing zettel tags
       CREATE TABLE IF NOT EXISTS tag (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL
+        name TEXT NOT NULL UNIQUE
       );
 
       -- Many-to-many relationship table between zettels and tags
@@ -92,13 +93,12 @@ func setupTestDB(db *sqlx.DB) error {
 }
 
 func insertDummyData(db *sqlx.DB) error {
-	// Insert dummy data
 	_, err := db.Exec(`
         -- Create dummy data for directories table
-        INSERT INTO dirs(name) VALUES('20231028012959');
-        INSERT INTO dirs(name) VALUES('20231028013010');
-        INSERT INTO dirs(name) VALUES('20231028013031');
-        INSERT INTO dirs(name) VALUES('20231028013100');
+        INSERT INTO dir(name) VALUES('20231028012959');
+        INSERT INTO dir(name) VALUES('20231028013010');
+        INSERT INTO dir(name) VALUES('20231028013031');
+        INSERT INTO dir(name) VALUES('20231028013100');
 
 				-- Insert zettels
 				INSERT INTO zettel (name, title, body, mtime, dir_name) VALUES ('README.md', '# Zettel 1', 'This is the zettel body', '2023-10-28T01:29:59Z', '20231028012959');
@@ -209,71 +209,14 @@ func ExampleProcessZettels_Update() {
 	defer tx.Rollback()
 
 	testZetDir := filepath.Join("..", "testdata", "zet")
-	existingZettels := make(map[string]map[string]Zettel)
-
-	// Dummy time for modification time
-	dummyTime := time.Now().Add(-200 * time.Hour).Format(time.RFC3339)
-
-	dirs := []string{"20231028012959", "20231028013010", "20231028013031"}
-	for _, d := range dirs {
-		existingZettels[d] = make(map[string]Zettel)
-	}
-
-	// First Zettel directory: '20231028012959' with file 'README.md'
-	existingZettels["20231028012959"]["README.md"] = Zettel{
-		ID:    1,
-		Name:  "README.md",
-		Title: `# Zettel 1`,
-		Body: `
-
-		This is the zettel body`,
-		Links:   []Link{},
-		Tags:    []Tag{},
-		Mtime:   dummyTime,
-		DirName: "20231028012959",
-	}
-
-	// Second Zettel directory: '20231028013010' with file 'README.md'
-	existingZettels["20231028013010"]["README.md"] = Zettel{
-		ID:    2,
-		Name:  "README.md",
-		Title: `# Zettel 2`,
-		Body: `
-
-		This is the zettel body`,
-		Links:   []Link{},
-		Tags:    []Tag{Tag{Name: `productivity`}, Tag{Name: `pkms`}},
-		Mtime:   dummyTime,
-		DirName: "20231028013010",
-	}
-
-	// Third Zettel directory: '20231028013031' with files 'README.md' and 'outline.md'
-	existingZettels["20231028013031"]["README.md"] = Zettel{
-		ID:      3,
-		Name:    "README.md",
-		Title:   `# Zettel 3`,
-		Body:    ``,
-		Links:   []Link{},
-		Tags:    []Tag{},
-		Mtime:   dummyTime,
-		DirName: "20231028013031",
-	}
-	existingZettels["20231028013031"]["outline.md"] = Zettel{
-		ID:      4,
-		Name:    "outline.md",
-		Title:   `# Outline`,
-		Body:    ``,
-		Links:   []Link{},
-		Tags:    []Tag{},
-		Mtime:   dummyTime,
-		DirName: "20231028013031",
-	}
+	existingZettels := getTestZettelMap()
 
 	const dirsQuery = `
-    INSERT INTO dirs (name)
+    INSERT INTO dir (name)
     VALUES ($1);
     `
 
+	dirs := []string{"20231028012959", "20231028013010", "20231028013031"}
 	for _, d := range dirs {
 		_, err := tx.Exec(dirsQuery, d)
 		if err != nil {
@@ -318,7 +261,7 @@ func ExampleProcessZettels_Update() {
 
 	// Validate zettel insertions.
 	files := []Zettel{}
-	err = tx.Select(&files, "SELECT * FROM files;")
+	err = tx.Select(&files, "SELECT * FROM zettel;")
 	if err != nil {
 		fmt.Printf("Failed to select database zettels: %v\n", err)
 		return
@@ -336,18 +279,63 @@ func ExampleProcessZettels_Update() {
 }
 
 func ExampleProcessZettels_Delete() {
-	tx, err := getTestTransaction()
+	existingZettels := getTestZettelMap()
+	tx, err := insertTestZettelMap(existingZettels)
+	defer tx.Rollback()
 	if err != nil {
-		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		fmt.Printf("Error inserting zettel map: %v", err)
 		return
 	}
-	defer tx.Rollback()
 
 	testZetDir := filepath.Join("..", "testdata", "zet")
+
+	if err := processZettels(tx, testZetDir, existingZettels); err != nil {
+		fmt.Printf("Failed to process zettels: %v\n", err)
+		return
+	}
+
+	// Validate zettel insertions.
+	zettels := []Zettel{}
+	err = tx.Select(&zettels, "SELECT * FROM zettel;")
+	if err != nil {
+		fmt.Printf("Failed to select database zettels: %v\n", err)
+		return
+	}
+
+	directories := []string{}
+	err = tx.Select(&directories, "SELECT name FROM dir;")
+	if err != nil {
+		fmt.Printf("Failed to select database dirs: %v\n", err)
+		return
+	}
+
+	fmt.Println("Dirs")
+	for _, d := range directories {
+		fmt.Println(d)
+	}
+
+	fmt.Println("Files")
+	for _, f := range zettels {
+		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.ID)
+	}
+
+	// Output:
+	// Dirs
+	// 20231028012959
+	// 20231028013010
+	// 20231028013031
+	// Files
+	// ./20231028012959/README.md id: 1
+	// ./20231028013010/README.md id: 2
+	// ./20231028013031/README.md id: 3
+	// ./20231028013031/outline.md id: 4
+}
+
+func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels := make(map[string]map[string]Zettel)
 
 	// Dummy time for modification time
-	dummyTime := time.Now().Add(-86 * time.Hour).Format(time.RFC3339)
+	dummyTime := `2023-11-06T22:36:00Z`
 
 	dirs := []string{"20231028012959", "20231028013010", "20231028013031", "20231031214058"}
 	for _, d := range dirs {
@@ -361,7 +349,7 @@ func ExampleProcessZettels_Delete() {
 		Title: `# Zettel 1`,
 		Body: `
 
-      This is the zettel body`,
+        This is the zettel body`,
 		Links:   []Link{},
 		Tags:    []Tag{},
 		Mtime:   dummyTime,
@@ -375,7 +363,7 @@ func ExampleProcessZettels_Delete() {
 		Title: `# Zettel 2`,
 		Body: `
 
-      This is the zettel body`,
+        This is the zettel body`,
 		Links:   []Link{},
 		Tags:    []Tag{Tag{Name: `productivity`}, Tag{Name: `pkms`}},
 		Mtime:   dummyTime,
@@ -425,24 +413,32 @@ func ExampleProcessZettels_Delete() {
 		Mtime:   dummyTime,
 		DirName: "20231031214058",
 	}
+	return existingZettels
+}
+
+func insertTestZettelMap(existingZettels map[string]map[string]Zettel) (*sqlx.Tx, error) {
+	tx, err := getTestTransaction()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to establish database connection: %v.\n", err)
+	}
 
 	const dirsQuery = `
-    INSERT INTO dirs (name)
-    VALUES ($1);
-    `
+      INSERT INTO dir (name)
+      VALUES ($1);
+      `
 
+	dirs := []string{"20231028012959", "20231028013010", "20231028013031", "20231031214058"}
 	for _, d := range dirs {
 		_, err := tx.Exec(dirsQuery, d)
 		if err != nil {
-			fmt.Printf("Failed to insert existing dirs: %v\n", err)
-			return
+			return nil, fmt.Errorf("Failed to insert existing dirs: %v\n", err)
 		}
 	}
 
 	const query = `
-    INSERT INTO files (name, title, body, mtime, dir_name)
-    VALUES ($1, $2, $3, $4);
-    `
+      INSERT INTO zettel (name, title, body, mtime, dir_name)
+      VALUES ($1, $2, $3, $4, $5);
+      `
 
 	// Create an array to hold all files before inserting them into the database
 	var allFiles []Zettel
@@ -463,62 +459,21 @@ func ExampleProcessZettels_Delete() {
 		// This will insert a new row into the 'files' table with the provided values
 		_, err := tx.Exec(query, f.Name, f.Title, f.Body, f.Mtime, f.DirName)
 		if err != nil {
-			fmt.Printf("Failed to insert existing files: %v\n", err)
-			return
+			return nil, fmt.Errorf("Failed to insert existing files: %v\n", err)
 		}
 	}
-
-	if err := processZettels(tx, testZetDir, existingZettels); err != nil {
-		fmt.Printf("Failed to process zettels: %v\n", err)
-		return
-	}
-
-	// Validate zettel insertions.
-	zettels := []Zettel{}
-	err = tx.Select(&zettels, "SELECT * FROM zettel;")
-	if err != nil {
-		fmt.Printf("Failed to select database zettels: %v\n", err)
-		return
-	}
-
-	directories := []string{}
-	err = tx.Select(&directories, "SELECT name FROM dirs;")
-	if err != nil {
-		fmt.Printf("Failed to select database dirs: %v\n", err)
-		return
-	}
-
-	fmt.Println("Dirs")
-	for _, d := range directories {
-		fmt.Println(d)
-	}
-
-	fmt.Println("Files")
-	for _, f := range zettels {
-		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.ID)
-	}
-
-	// Output:
-	// Dirs
-	// 20231028012959
-	// 20231028013010
-	// 20231028013031
-	// Files
-	// ./20231028012959/README.md id: 1
-	// ./20231028013010/README.md id: 2
-	// ./20231028013031/README.md id: 3
-	// ./20231028013031/outline.md id: 4
+	return tx, nil
 }
 
 func ExampleAddZettel() {
+	testZetDir := filepath.Join("..", "testdata", "zet", "20231028013031")
+
 	tx, err := getTestTransaction()
 	if err != nil {
 		fmt.Printf("Failed to establish database connection: %v.\n", err)
 		return
 	}
 	defer tx.Rollback()
-
-	testZetDir := filepath.Join("..", "testdata", "zet", "20231028013031")
 
 	if err := addZettel(tx, testZetDir); err != nil {
 		fmt.Printf("Failed to add zettel: %v\n", err)
@@ -527,7 +482,7 @@ func ExampleAddZettel() {
 
 	// Validate zettel insertion.
 	files := []Zettel{}
-	err = tx.Select(&files, "SELECT * FROM files WHERE dir_name = 20231028013031;")
+	err = tx.Select(&files, "SELECT * FROM zettel WHERE dir_name = 20231028013031;")
 	if err != nil {
 		fmt.Printf("Failed to select zettel: %v\n", err)
 		return
@@ -559,7 +514,7 @@ func ExampleProcessFiles_EmptyDB() {
 
 	// Validate zettel insertion.
 	files := []Zettel{}
-	err = tx.Select(&files, "SELECT * FROM files WHERE dir_name = 20231028013031;")
+	err = tx.Select(&files, "SELECT * FROM zettel WHERE dir_name = 20231028013031;")
 	if err != nil {
 		fmt.Printf("Failed to select zettel: %v\n", err)
 		return
@@ -574,6 +529,14 @@ func ExampleProcessFiles_EmptyDB() {
 }
 
 func ExampleSplitZettel() {
+	existingZettels := getTestZettelMap()
+	tx, err := insertTestZettelMap(existingZettels)
+	defer tx.Rollback()
+	if err != nil {
+		fmt.Printf("Error inserting zettel map: %v", err)
+		return
+	}
+
 	const e = `# Example Title
 
 This is some body text.
@@ -582,21 +545,23 @@ It can span multiple lines.
 See:
 
 * [20231028013031](../20231028013031) Some linked Zettel
-* [20231029013031](../20231029013031) Another linked Zettel
+* [20231028013031](../20231028013031) Another linked Zettel
+* [20240000003031](../20240000003031) Non-existent Zettel
 
 		#tag1 badTag #tag2`
 
-	title, body, links, tags := splitZettel(e)
-	fmt.Println("Title:", title)
+	z := &Zettel{}
+	splitZettel(tx, z, e)
+	fmt.Println("Title:", z.Title)
 	fmt.Println("Body:")
-	fmt.Printf(body)
+	fmt.Printf(z.Body)
 	fmt.Println("Links:")
-	for _, l := range links {
-		fmt.Printf("\t%s\n", l)
+	for _, l := range z.Links {
+		fmt.Printf("\t%s\n", l.Content)
 	}
 	fmt.Println("Tags:")
-	for _, t := range tags {
-		fmt.Printf("\t%s\n", t)
+	for _, t := range z.Tags {
+		fmt.Printf("\t%s\n", t.Name)
 	}
 
 	// Output:
@@ -610,7 +575,7 @@ See:
 	//
 	// Links:
 	// 	[20231028013031](../20231028013031) Some linked Zettel
-	// 	[20231029013031](../20231029013031) Another linked Zettel
+	// 	[20231028013031](../20231028013031) Another linked Zettel
 	// Tags:
 	// 	tag1
 	// 	tag2

@@ -45,16 +45,24 @@ type Tag struct {
 }
 
 type Link struct {
-	ID       int    `db:"id"`        // unique link id
-	Content  string `db:"content"`   // zettel link
-	ZettelID int    `db:"zettel_id"` // referenced zettel id
+	ID           int    `db:"id"`            // unique link id
+	Content      string `db:"content"`       // zettel link
+	FromZettelID int    `db:"from_zettel_id` // zettel id where link lives
+	ToZettelID   int    `db:"to_zettel_id"`  // zettel id where link points to
 }
 
 // AllZettels returns all existing zettel files.
 func (s *Storage) AllZettels() ([]Zettel, error) {
-	const query = `SELECT * FROM zettel;`
-	const tagQuery = `SELECT name FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_id = $1`
-	const linkQuery = `SELECT content FROM link WHERE zettel_id = $1`
+	const (
+		query    = `SELECT * FROM zettel;`
+		tagQuery = `
+			SELECT * FROM tag
+			JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+			WHERE zettel_id = $1;`
+		linkQuery = `
+			SELECT * FROM link
+			WHERE from_zettel_id = $1;`
+	)
 	zettels := []Zettel{}
 
 	zettelRows, err := s.db.Queryx(query)
@@ -165,8 +173,10 @@ func Init() (*Storage, error) {
       CREATE TABLE IF NOT EXISTS link (
 			  id INTEGER PRIMARY KEY AUTOINCREMENT,
 			  content TEXT NOT NULL,
-			  zettel_id INTEGER NOT NULL,
-			  FOREIGN KEY(zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
+			  from_zettel_id INTEGER NOT NULL,
+			  to_zettel_id INTEGER NOT NULL,
+			  FOREIGN KEY(from_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
+			  FOREIGN KEY(to_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
 			);
 
       -- Table for storing zettel tag
@@ -274,7 +284,7 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 func addZettel(tx *sqlx.Tx, dirPath string) error {
 	dirName := path.Base(dirPath)
 	if err := insertDir(tx, dirName); err != nil {
-		return err
+		return fmt.Errorf("Error inserting directory: %v", err)
 	}
 
 	// Fetch files inside this directory
@@ -307,15 +317,8 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 			return err
 		}
 
-		var links, tags []string
 		content := string(contentBytes)
-		z.Title, z.Body, links, tags = splitZettel(content)
-		for _, l := range links {
-			z.Links = append(z.Links, Link{Content: l})
-		}
-		for _, t := range tags {
-			z.Tags = append(z.Tags, Tag{Name: t})
-		}
+		splitZettel(tx, &z, content)
 
 		err = insertFile(tx, z)
 		if err != nil {
@@ -342,12 +345,12 @@ func deleteZettels(tx *sqlx.Tx, zm map[string]map[string]Zettel) error {
 }
 
 // insertDir inserts a directory into the dirs database table.
-func insertDir(tx *sqlx.Tx, name string) error {
+func insertDir(tx *sqlx.Tx, n string) error {
 	const query = `
     INSERT INTO dir (name)
     VALUES ($1);
     `
-	_, err := tx.Exec(query, name)
+	_, err := tx.Exec(query, n)
 	return err
 }
 
@@ -401,15 +404,8 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 			return err
 		}
 
-		var links, tags []string
 		content := string(contentBytes)
-		z.Title, z.Body, links, tags = splitZettel(content)
-		for _, l := range links {
-			z.Links = append(z.Links, Link{Content: l})
-		}
-		for _, t := range tags {
-			z.Tags = append(z.Tags, Tag{Name: t})
-		}
+		splitZettel(tx, &z, content)
 
 		// If the file doesn't exist in this zettel, insert it into the
 		// database.
@@ -442,11 +438,10 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 	return nil
 }
 
-// splitZettel breaks and returns a given zettel in it's parts: title, body,
-// links, and tags.
-func splitZettel(content string) (string, string, []string, []string) {
-	var title, body string
-	var bodyLines, links, tags []string
+// splitZettel breaks a zettel's contents and assigns it's parts to
+// associated fields: title, body, links, and tags.
+func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
+	var bodyLines []string
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
 	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
@@ -457,8 +452,8 @@ func splitZettel(content string) (string, string, []string, []string) {
 		line := scanner.Text()
 
 		// Is line the title?
-		if title == "" && strings.HasPrefix(line, `# `) {
-			title = strings.TrimPrefix(line, `# `)
+		if z.Title == "" && strings.HasPrefix(line, `# `) {
+			z.Title = strings.TrimPrefix(line, `# `)
 			isBody = true
 			continue
 		}
@@ -466,7 +461,14 @@ func splitZettel(content string) (string, string, []string, []string) {
 		// Is line a markdown link?
 		matches := linkRegex.FindStringSubmatch(line)
 		if len(matches) > 0 {
-			links = append(links, matches[0])
+			iso := matches[1]
+			id, err := zettelIdDir(tx, iso)
+			if err != nil {
+				// If referenced zettel id couldn't be found, skip link
+				continue
+			}
+			l := Link{Content: matches[0], ToZettelID: id}
+			z.Links = append(z.Links, l)
 			continue
 		}
 
@@ -478,7 +480,7 @@ func splitZettel(content string) (string, string, []string, []string) {
 			for _, t := range ts {
 				if strings.HasPrefix(t, `#`) {
 					tt := strings.TrimPrefix(t, `#`)
-					tags = append(tags, tt)
+					z.Tags = append(z.Tags, Tag{Name: tt})
 				}
 				// If tag doesn't start with `#`, skip it.
 			}
@@ -491,26 +493,38 @@ func splitZettel(content string) (string, string, []string, []string) {
 		}
 	}
 
-	body = strings.Join(bodyLines, "\n")
-	return title, body, links, tags
+	z.Body = strings.Join(bodyLines, "\n")
+}
+
+// zettelIdDir retrieves and returns the zettel using a given unique
+// isosec (director name).
+func zettelIdDir(tx *sqlx.Tx, iso string) (int, error) {
+	const query = `SELECT id FROM zettel WHERE dir_name=$1 LIMIT 1;`
+	var id int
+	err := tx.Get(&id, query, iso)
+	return id, err
 }
 
 // insertFile inserts a new file into the database.
 func insertFile(tx *sqlx.Tx, z Zettel) error {
-	const query = `
+	const (
+		insertZettelSQL = `
     INSERT INTO zettel (name, title, body, mtime, dir_name)
     VALUES ($1, $2, $3, $4, $5)
-		RETURNING id;
-    `
+		RETURNING id;`
+		insertLinksSQL = `
+		INSERT INTO link (content, from_zettel_id, to_zettel_id)
+		VALUES ($1, $2, $3);`
+	)
 	var id int
-	err := tx.QueryRow(query, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(&id)
+	err := tx.QueryRow(insertZettelSQL, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(&id)
 	if err != nil {
 		return err
 	}
 
 	// Insert any new links
-	for _, link := range z.Links {
-		_, err = tx.Exec(`INSERT INTO link (content, zettel_id) VALUES ($1, $2)`, link.Content, id)
+	for _, l := range z.Links {
+		_, err = tx.Exec(insertLinksSQL, l.Content, id, l.ToZettelID)
 		if err != nil {
 			return err
 		}
@@ -526,7 +540,16 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 // updateFile updates a file in the database given directory and file
 // name.
 func updateFile(tx *sqlx.Tx, z Zettel) error {
-	const idQuery = `SELECT id FROM zettel WHERE name=$1 AND dir_name=$2`
+	const (
+		idQuery = `SELECT id FROM zettel
+			WHERE name=$1 AND dir_name=$2`
+		zettelQuery = `
+    	UPDATE zettel SET title=$1, body=$2, mtime=$3
+			WHERE id=$4;`
+		insertLinksSQL = `
+			INSERT INTO link (content, from_zettel_id, to_zettel_id)
+			VALUES ($1, $2, $3)`
+	)
 	var id int
 	err := tx.Get(&id, idQuery, z.Name, z.DirName)
 	if err != nil {
@@ -534,29 +557,25 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
 	}
 
 	// Update zettel table record
-	const zettelQuery = `
-    UPDATE zettel SET title=$1, body=$2, mtime=$3
-		WHERE id=$4;
-    `
 	_, err = tx.Exec(zettelQuery, z.Title, z.Body, z.Mtime, id)
 	if err != nil {
 		return fmt.Errorf("Error updating zettel table record: %v", err)
 	}
 
 	// Update links - for simplicity, remove all existing links and add new ones
-	_, err = tx.Exec(`DELETE FROM link WHERE zettel_id=$1`, id)
+	_, err = tx.Exec(`DELETE FROM link WHERE from_zettel_id=$1`, id)
 	if err != nil {
 		return fmt.Errorf("Failed to update zettel links: %v", err)
 	}
-	for _, link := range z.Links {
-		_, err = tx.Exec(`INSERT INTO link (content, zettel_id) VALUES ($1, $2)`, link.Content, id)
+	for _, l := range z.Links {
+		_, err = tx.Exec(insertLinksSQL, l.Content, id, l.ToZettelID)
 		if err != nil {
 			return fmt.Errorf("Failed to update zettel links: %v", err)
 		}
 	}
 
 	// Update tags - remove all existing associations and then re-add
-	_, err = tx.Exec(`DELETE FROM zettel_tags WHERE zettel_id=?`, id)
+	_, err = tx.Exec(`DELETE FROM zettel_tags WHERE zettel_id=$1`, id)
 	if err != nil {
 		return fmt.Errorf("Error updating tags: %v", err)
 	}
@@ -571,12 +590,21 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
 // creates associations in the zettel tags table. The given zettel id
 // is used to create the zettel-tag associations.
 func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
+	const (
+		insertTagSQL = `INSERT INTO tag (name)
+			VALUES ($1) ON CONFLICT(name)
+			DO NOTHING RETURNING id`
+		selectTagIDSQL = `SELECT id FROM tag
+			WHERE name = $1`
+		insertZettelTagSQL = `INSERT INTO zettel_tags (zettel_id, tag_id)
+			VALUES ($1, $2)`
+	)
+
 	for _, tag := range tags {
 		var tagID int
 
 		// Try to insert the tag into the tag table. If it already exists, do nothing.
 		// If the tag is successfully inserted, its ID will be returned.
-		insertTagSQL := `INSERT INTO tag (name) VALUES ($1) ON CONFLICT(name) DO NOTHING RETURNING id`
 		err := tx.QueryRow(insertTagSQL, tag.Name).Scan(&tagID)
 		if err != nil && err != sql.ErrNoRows {
 			// If the error is not 'no rows in result set' then it's an actual error
@@ -585,7 +613,6 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 
 		// If the tag already exists, its ID wasn't returned, so retrieve it
 		if err == sql.ErrNoRows {
-			selectTagIDSQL := `SELECT id FROM tag WHERE name = $1`
 			err = tx.QueryRow(selectTagIDSQL, tag.Name).Scan(&tagID)
 			if err != nil {
 				return err
@@ -593,7 +620,6 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 		}
 
 		// Insert the zettel-tag association into the zettel_tags table
-		insertZettelTagSQL := `INSERT INTO zettel_tags (zettel_id, tag_id) VALUES ($1, $2)`
 		_, err = tx.Exec(insertZettelTagSQL, zettelID, tagID)
 		if err != nil {
 			return err
