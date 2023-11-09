@@ -45,10 +45,10 @@ type Tag struct {
 }
 
 type Link struct {
-	ID           int    `db:"id"`            // unique link id
-	Content      string `db:"content"`       // zettel link
-	FromZettelID int    `db:"from_zettel_id` // zettel id where link lives
-	ToZettelID   int    `db:"to_zettel_id"`  // zettel id where link points to
+	ID           int    `db:"id"`             // unique link id
+	Content      string `db:"content"`        // zettel link
+	FromZettelID int    `db:"from_zettel_id"` // zettel id where link lives
+	ToZettelID   int    `db:"to_zettel_id"`   // zettel id where link points to
 }
 
 // AllZettels returns all existing zettel files.
@@ -56,7 +56,7 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 	const (
 		query    = `SELECT * FROM zettel;`
 		tagQuery = `
-			SELECT * FROM tag
+			SELECT tag.* FROM tag
 			JOIN zettel_tags ON tag.id = zettel_tags.tag_id
 			WHERE zettel_id = $1;`
 		linkQuery = `
@@ -75,19 +75,19 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 		var z Zettel
 		err := zettelRows.StructScan(&z)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error getting zettels records: %v", err)
 		}
 
 		// Fetch tags for this zettel
 		err = s.db.Select(&z.Tags, tagQuery, z.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
 
 		// Fetch links for this zettel
 		err = s.db.Select(&z.Links, linkQuery, z.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
 
 		zettels = append(zettels, z)
@@ -166,7 +166,7 @@ func Init() (*Storage, error) {
         body TEXT NOT NULL,            -- File body
         mtime TEXT NOT NULL,           -- Last modification time
         dir_name TEXT NOT NULL,        -- Name of the directory this file belongs to
-				FOREIGN KEY(dir_name) REFERENCES Directories(name) -- Reference to parent directory
+				FOREIGN KEY(dir_name) REFERENCES dir(name) -- Reference to parent directory
 			);
 
       -- Table for storing zettel links
@@ -190,9 +190,12 @@ func Init() (*Storage, error) {
 				zettel_id INTEGER NOT NULL,            -- ID of the zettel
 				tag_id INTEGER NOT NULL,               -- ID of the tag
 				PRIMARY KEY(zettel_id, tag_id),        -- Composite primary key
-				FOREIGN KEY(zettel_id) REFERENCES zettels(id) ON DELETE CASCADE,
+				FOREIGN KEY(zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
 				FOREIGN KEY(tag_id) REFERENCES tag(id) ON DELETE CASCADE
-			);`
+			);
+
+			PRAGMA foreign_keys = ON;
+			`
 
 	_, err = db.Exec(query)
 	if err != nil {
@@ -519,14 +522,14 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 	var id int
 	err := tx.QueryRow(insertZettelSQL, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(&id)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error inserting zettel record: %v", err)
 	}
 
 	// Insert any new links
 	for _, l := range z.Links {
 		_, err = tx.Exec(insertLinksSQL, l.Content, id, l.ToZettelID)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error inserting links: %v", err)
 		}
 	}
 
@@ -631,6 +634,10 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 
 // deleteFiles deletes any remaining files in an existing files map
 // from the database. This removes files from a single zettel directory.
+//
+// Removing a zettel file may result in a tag that is no longer
+// associated with any zettels. Thus, this function performs a clean up
+// process that removes any orphaned tags.
 func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
 	const query = `DELETE FROM zettel WHERE id = $1;`
 	stmt, err := tx.Prepare(query)
@@ -646,6 +653,19 @@ func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
 			// Log the error but continue deleting other files
 			log.Printf("Error deleting file with id %d: %v", z.ID, err)
 		}
+	}
+
+	// Remove tags that are no longer associated with any zettels.
+	const delTags = `
+		DELETE FROM tag
+		WHERE id NOT IN (
+    	SELECT DISTINCT tag_id
+    	FROM zettel_tags
+		);
+		`
+	_, err = tx.Exec(delTags)
+	if err != nil {
+		return fmt.Errorf("Error cleaning up any orphaned tags: %v", err)
 	}
 	return nil
 }
