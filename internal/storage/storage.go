@@ -64,50 +64,38 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 			WHERE from_zettel_id = $1;`
 	)
 	zettels := []Zettel{}
-
-	zettelRows, err := s.db.Queryx(query)
-	if err != nil {
-		return nil, err
+	if err := s.db.Select(&zettels, query); err != nil {
+		return nil, fmt.Errorf("Error getting zettels records: %v", err)
 	}
-	defer zettelRows.Close()
-
-	for zettelRows.Next() {
-		var z Zettel
-		err := zettelRows.StructScan(&z)
-		if err != nil {
-			return nil, fmt.Errorf("Error getting zettels records: %v", err)
-		}
-
-		// Fetch tags for this zettel
-		err = s.db.Select(&z.Tags, tagQuery, z.ID)
-		if err != nil {
+	// Fetch tags and links for this zettel
+	for _, z := range zettels {
+		if err := s.db.Select(&z.Tags, tagQuery, z.ID); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
-
-		// Fetch links for this zettel
-		err = s.db.Select(&z.Links, linkQuery, z.ID)
-		if err != nil {
+		if err := s.db.Select(&z.Links, linkQuery, z.ID); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
-
-		zettels = append(zettels, z)
 	}
-	if err := zettelRows.Err(); err != nil {
-		return nil, err
-	}
-
 	return zettels, nil
 }
 
-// SearchZettels returns all matching zettel files given a search term.
+// SearchZettels searches the zettelkasten for zettels matching the query.
+// It returns a slice of Zettels.
 func (s *Storage) SearchZettels(term string) ([]Zettel, error) {
-	files := []Zettel{}
-	const query = `SELECT * FROM files;`
-	err := s.db.Select(&files, query)
-	if err != nil {
+	var zIDs []int
+	const query = `
+  	SELECT id
+  	FROM zettel_fts
+  	WHERE zettel_fts MATCH $1
+  	ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
+  `
+	if err := s.db.Select(&zIDs, query, term); err != nil {
 		return nil, err
 	}
-	return files, nil
+
+	z := []Zettel{}
+	// TODO execute sql query to fill zettel fields given list of ids
+	return z, nil
 }
 
 // UpdateDB initializes the database, retrieve zet state from the
@@ -175,6 +163,7 @@ func Init() (*Storage, error) {
 			  content TEXT NOT NULL,
 			  from_zettel_id INTEGER NOT NULL,
 			  to_zettel_id INTEGER NOT NULL,
+				UNIQUE(content, from_zettel_id, to_zettel_id),
 			  FOREIGN KEY(from_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
 			  FOREIGN KEY(to_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
 			);
@@ -193,6 +182,52 @@ func Init() (*Storage, error) {
 				FOREIGN KEY(zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
 				FOREIGN KEY(tag_id) REFERENCES tag(id) ON DELETE CASCADE
 			);
+
+			CREATE VIRTUAL TABLE IF NOT EXISTS zettel_fts USING fts5(
+				title,
+				body,
+				tags,
+				tokenize='porter'  -- This uses the Porter stemming algorithm
+			);
+
+			-- Insert trigger for zettel table
+			CREATE TRIGGER IF NOT EXISTS ai_zettel AFTER INSERT ON zettel BEGIN
+				INSERT INTO zettel_fts(rowid, title, body, tags) VALUES (new.id, new.title, new.body,
+        (SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.id));
+			END;
+
+			-- Update trigger for zettel table
+			CREATE TRIGGER IF NOT EXISTS au_zettel AFTER UPDATE ON zettel BEGIN
+					UPDATE zettel_fts SET title = new.title, body = new.body, tags =
+							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.id)
+					WHERE rowid = old.id;
+			END;
+
+			-- Delete trigger for zettel table
+			CREATE TRIGGER IF NOT EXISTS ad_zettel AFTER DELETE ON zettel BEGIN
+					DELETE FROM zettel_fts WHERE rowid = old.id;
+			END;
+
+			-- Insert trigger for zettel_tags table
+			CREATE TRIGGER IF NOT EXISTS ai_zettel_tags AFTER INSERT ON zettel_tags BEGIN
+					UPDATE zettel_fts SET tags =
+							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.zettel_id)
+					WHERE rowid = new.zettel_id;
+			END;
+
+			-- Update trigger for zettel_tags table
+			CREATE TRIGGER IF NOT EXISTS au_zettel_tags AFTER UPDATE ON zettel_tags BEGIN
+					UPDATE zettel_fts SET tags =
+							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.zettel_id)
+					WHERE rowid = new.zettel_id;
+			END;
+
+			-- Delete trigger for zettel_tags table
+			CREATE TRIGGER IF NOT EXISTS ad_zettel_tags AFTER DELETE ON zettel_tags BEGIN
+					UPDATE zettel_fts SET tags =
+							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = old.zettel_id)
+					WHERE rowid = old.zettel_id;
+			END;
 
 			PRAGMA foreign_keys = ON;
 			`
