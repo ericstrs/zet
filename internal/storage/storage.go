@@ -192,14 +192,23 @@ func Init() (*Storage, error) {
 
 			-- Insert trigger for zettel table
 			CREATE TRIGGER IF NOT EXISTS ai_zettel AFTER INSERT ON zettel BEGIN
-				INSERT INTO zettel_fts(rowid, title, body, tags) VALUES (new.id, new.title, new.body,
-        (SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.id));
+				INSERT INTO zettel_fts(rowid, title, body, tags) VALUES (new.id, new.title, new.body, (
+						SELECT GROUP_CONCAT(name, ' ')
+						FROM tag
+						JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+						WHERE zettel_tags.zettel_id = new.id
+					)
+				);
 			END;
 
 			-- Update trigger for zettel table
 			CREATE TRIGGER IF NOT EXISTS au_zettel AFTER UPDATE ON zettel BEGIN
-					UPDATE zettel_fts SET title = new.title, body = new.body, tags =
-							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.id)
+					UPDATE zettel_fts SET title = new.title, body = new.body, tags = (
+						SELECT GROUP_CONCAT(name, ' ')
+						FROM tag
+						JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+						WHERE zettel_tags.zettel_id = new.id
+					)
 					WHERE rowid = old.id;
 			END;
 
@@ -210,22 +219,33 @@ func Init() (*Storage, error) {
 
 			-- Insert trigger for zettel_tags table
 			CREATE TRIGGER IF NOT EXISTS ai_zettel_tags AFTER INSERT ON zettel_tags BEGIN
-					UPDATE zettel_fts SET tags =
-							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.zettel_id)
+					UPDATE zettel_fts SET tags = (
+						SELECT GROUP_CONCAT(name, ' ')
+						FROM tag
+						JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+						WHERE zettel_tags.zettel_id = new.zettel_id
+					)
 					WHERE rowid = new.zettel_id;
 			END;
 
 			-- Update trigger for zettel_tags table
 			CREATE TRIGGER IF NOT EXISTS au_zettel_tags AFTER UPDATE ON zettel_tags BEGIN
-					UPDATE zettel_fts SET tags =
-							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = new.zettel_id)
+					UPDATE zettel_fts SET tags = (
+						SELECT GROUP_CONCAT(name, ' ')
+						FROM tag
+						JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+						WHERE zettel_tags.zettel_id = new.zettel_id
+					)
 					WHERE rowid = new.zettel_id;
 			END;
 
 			-- Delete trigger for zettel_tags table
 			CREATE TRIGGER IF NOT EXISTS ad_zettel_tags AFTER DELETE ON zettel_tags BEGIN
-					UPDATE zettel_fts SET tags =
-							(SELECT GROUP_CONCAT(name, ' ') FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id WHERE zettel_tags.zettel_id = old.zettel_id)
+					UPDATE zettel_fts SET tags = (
+						SELECT GROUP_CONCAT(name, ' ')
+						FROM tag JOIN zettel_tags ON tag.id = zettel_tags.tag_id
+						WHERE zettel_tags.zettel_id = old.zettel_id
+					)
 					WHERE rowid = old.zettel_id;
 			END;
 
