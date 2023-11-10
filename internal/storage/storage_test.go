@@ -70,6 +70,7 @@ func setupTestDB(db *sqlx.DB) error {
         content TEXT NOT NULL,
         from_zettel_id INTEGER NOT NULL,
         to_zettel_id INTEGER NOT NULL,
+				UNIQUE(content, from_zettel_id, to_zettel_id),
         FOREIGN KEY(from_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
         FOREIGN KEY(to_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
       );
@@ -125,7 +126,7 @@ func insertDummyData(db *sqlx.DB) error {
 	return nil
 }
 
-func ExampleGetExistingZettels() {
+func ExampleZettelsMap() {
 	db, err := getDBConnection()
 	if err != nil {
 		fmt.Printf("Failed to establish database connection: %v.\n", err)
