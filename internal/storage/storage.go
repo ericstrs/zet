@@ -358,8 +358,7 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 		content := string(contentBytes)
 		splitZettel(tx, &z, content)
 
-		err = insertFile(tx, z)
-		if err != nil {
+		if err := insertFile(tx, z); err != nil {
 			return fmt.Errorf("Failed to insert new file: %v", err)
 		}
 	}
@@ -448,8 +447,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		// If the file doesn't exist in this zettel, insert it into the
 		// database.
 		if !exists {
-			err := insertFile(tx, z)
-			if err != nil {
+			if err := insertFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to insert new file: %v", err)
 			}
 			continue
@@ -584,9 +582,6 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
 		zettelQuery = `
     	UPDATE zettel SET title=$1, body=$2, mtime=$3
 			WHERE id=$4;`
-		insertLinksSQL = `
-			INSERT INTO link (content, from_zettel_id, to_zettel_id)
-			VALUES ($1, $2, $3)`
 	)
 	var id int
 	err := tx.Get(&id, idQuery, z.Name, z.DirName)
@@ -599,29 +594,166 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
 	if err != nil {
 		return fmt.Errorf("Error updating zettel table record: %v", err)
 	}
-
-	// Update links - for simplicity, remove all existing links and add new ones
-	_, err = tx.Exec(`DELETE FROM link WHERE from_zettel_id=$1`, id)
-	if err != nil {
-		return fmt.Errorf("Failed to update zettel links: %v", err)
+	if err := updateLinks(tx, z); err != nil {
+		return fmt.Errorf("Error updating links: %v", err)
 	}
-	for _, l := range z.Links {
-		_, err = tx.Exec(insertLinksSQL, l.Content, id, l.ToZettelID)
-		if err != nil {
-			return fmt.Errorf("Failed to update zettel links: %v", err)
-		}
-	}
-
-	// Update tags - remove all existing associations and then re-add
-	_, err = tx.Exec(`DELETE FROM zettel_tags WHERE zettel_id=$1`, id)
-	if err != nil {
-		return fmt.Errorf("Error updating tags: %v", err)
-	}
-	if err := insertTags(tx, id, z.Tags); err != nil {
+	if err := updateTags(tx, z); err != nil {
 		return fmt.Errorf("Error updating tags: %v", err)
 	}
 
 	return err
+}
+
+// updateLinks updates links for a given zettel.
+func updateLinks(tx *sqlx.Tx, z Zettel) error {
+	cl, err := currLinks(tx, z.ID)
+	if err != nil {
+		return fmt.Errorf("Error retrieving links: %v", err)
+	}
+	add, remove := diffLinks(cl, z.Links)
+	if err := addLinks(tx, z.ID, add); err != nil {
+		return fmt.Errorf("Error inserting links: %v", err)
+	}
+	if err := removeLinks(tx, z.ID, remove); err != nil {
+		return fmt.Errorf("Error removing links: %v", err)
+	}
+	return nil
+}
+
+// currLinks retrieves the current links for a given zettel id.
+func currLinks(tx *sqlx.Tx, zettelID int) ([]Link, error) {
+	var l []Link
+	const query = `SELECT * FROM link WHERE from_zettel_id=$1`
+	if err := tx.Select(&l, query, zettelID); err != nil {
+		return nil, fmt.Errorf("Error retrieving zettel links: %v", err)
+	}
+	return l, nil
+}
+
+// diffLinks determines which links to add and which to remove for a
+// single zettel.
+func diffLinks(cl, nl []Link) ([]Link, []Link) {
+	var add, remove []Link
+
+	// Create map of current links
+	currLinksMap := make(map[string]bool)
+	for _, link := range cl {
+		currLinksMap[link.Content] = true
+	}
+
+	// Find links to add
+	for _, link := range nl {
+		if !currLinksMap[link.Content] {
+			add = append(add, link)
+		}
+	}
+
+	// Create map of new links
+	newLinksMap := make(map[string]bool)
+	for _, link := range nl {
+		newLinksMap[link.Content] = true
+	}
+
+	// Find links to remove
+	for _, link := range cl {
+		if !newLinksMap[link.Content] {
+			remove = append(remove, link)
+		}
+	}
+
+	return add, remove
+}
+
+// addLinks inserts links for a given zettel id.
+func addLinks(tx *sqlx.Tx, zettelID int, links []Link) error {
+	const query = `
+			INSERT INTO link (content, from_zettel_id, to_zettel_id)
+			VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`
+	for _, l := range links {
+		_, err := tx.Exec(query, l.Content, zettelID, l.ToZettelID)
+		if err != nil {
+			return fmt.Errorf("Failed to insert zettel links: %v", err)
+		}
+	}
+	return nil
+}
+
+// removeLinks deletes links for a given zettel id.
+func removeLinks(tx *sqlx.Tx, fromZettelID int, links []Link) error {
+	const query = `DELETE FROM link WHERE id=$1 AND from_zettel_id=$2`
+	for _, l := range links {
+		_, err := tx.Exec(query, l.ID, fromZettelID)
+		if err != nil {
+			return fmt.Errorf("Failed to remove zettel links: %v", err)
+		}
+	}
+	return nil
+}
+
+// updateTags updates tags for a given zettel.
+func updateTags(tx *sqlx.Tx, z Zettel) error {
+	ct, err := currTags(tx, z.ID)
+	if err != nil {
+		return fmt.Errorf("Error retrieving tags: %v", err)
+	}
+	add, remove := diffTags(ct, z.Tags)
+	if err := insertTags(tx, z.ID, add); err != nil {
+		return fmt.Errorf("Error inserting tags: %v", err)
+	}
+	if err := removeTagLinks(tx, z.ID, remove); err != nil {
+		return fmt.Errorf("Error removing zettel-tag association: %v", err)
+	}
+	if err := cleanTags(tx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// currTags retrieves the current tags for a given zettel id.
+func currTags(tx *sqlx.Tx, id int) ([]Tag, error) {
+	var ct []Tag
+	const query = `
+	SELECT t.* FROM tag t
+	INNER JOIN zettel_tags zt ON t.id = zt.tag_id
+	WHERE zt.zettel_id=$1;`
+	if err := tx.Select(&ct, query, id); err != nil {
+		return nil, err
+	}
+	return ct, nil
+}
+
+// diffTags determines which tags to add and which to remove for a
+// single zettel.
+func diffTags(ct, nt []Tag) ([]Tag, []Tag) {
+	var add, remove []Tag
+
+	// Create map of existing tags
+	currTagsMap := make(map[string]bool)
+	for _, tag := range ct {
+		currTagsMap[tag.Name] = true
+	}
+
+	// Find tags to add
+	for _, tag := range nt {
+		if !currTagsMap[tag.Name] {
+			add = append(add, tag)
+		}
+	}
+
+	// Create map of new tags
+	newTagsMap := make(map[string]bool)
+	for _, tag := range nt {
+		newTagsMap[tag.Name] = true
+	}
+
+	// Find tags to remove
+	for _, tag := range ct {
+		if !newTagsMap[tag.Name] {
+			remove = append(remove, tag)
+		}
+	}
+
+	return add, remove
 }
 
 // insertTags inserts new tags into tag table if they don't exist and
@@ -667,6 +799,27 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 	return nil // Return nil if everything went smoothly
 }
 
+// removeTagLinks removes tag associations for a zettel by deleting
+// the record from the zettel_tags table where the zettel_id matches and the
+// tag_id corresponds to the tag name provided.
+func removeTagLinks(tx *sqlx.Tx, zettelID int, tags []Tag) error {
+	const query = `
+		DELETE FROM zettel_tags
+		WHERE zettel_id = $1 AND
+			tag_id = (
+				SELECT id
+				FROM tag
+				WHERE name = $2
+			);
+	`
+	for _, t := range tags {
+		if _, err := tx.Exec(query, zettelID, t.Name); err != nil {
+			return fmt.Errorf("Error removing a zettel-tag link: %v", err)
+		}
+	}
+	return nil
+}
+
 // deleteFiles deletes any remaining files in an existing files map
 // from the database. This removes files from a single zettel directory.
 //
@@ -690,7 +843,16 @@ func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
 		}
 	}
 
-	// Remove tags that are no longer associated with any zettels.
+	if err := cleanTags(tx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// cleanTags removes any tags that are no longer associated with any
+// zettels.
+func cleanTags(tx *sqlx.Tx) error {
 	const delTags = `
 		DELETE FROM tag
 		WHERE id NOT IN (
@@ -698,8 +860,7 @@ func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
     	FROM zettel_tags
 		);
 		`
-	_, err = tx.Exec(delTags)
-	if err != nil {
+	if _, err := tx.Exec(delTags); err != nil {
 		return fmt.Errorf("Error cleaning up any orphaned tags: %v", err)
 	}
 	return nil
