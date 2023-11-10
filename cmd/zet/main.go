@@ -31,19 +31,19 @@ import (
 	"github.com/iuiq/zet/internal/meta"
 )
 
-const usage = `Usage:
+const usage = `USAGE
 
-  zet [command] [arguments]
+	zet [command] [arguments]
 
-Commands:
+COMMANDS
 
-  add    - Adds a new zettel with the given title and content.
-  search - Searches for zettels given a query string.
-  merge  - Merges linked notes to form a single note.
-  list   - Lists all existing zettels.
-  title  - Prints the title of a zettel file.
-  link   - Prints the link of a zettel.
-  isosec - Prints the current ISO date to the millisecond.
+	add    - Adds a new zettel with the given title and content.
+	search - Searches for zettels given a query string.
+	merge  - Merges linked notes to form a single note.
+	list   - Lists all existing zettels.
+	title  - Prints the title of a zettel file.
+	link   - Prints the link of a zettel.
+	isosec - Prints the current ISO date to the millisecond.
 	commit - Performs a git commit using zettel's title.
 
 Appending "help" after any command will print more command info.
@@ -78,6 +78,10 @@ func Run() error {
 		}
 	case `commit`:
 		if err := z.CommitCmd(args); err != nil {
+			return err
+		}
+	case `list`:
+		if err := meta.ListCmd(args); err != nil {
 			return err
 		}
 	case `isosec`:
