@@ -73,20 +73,47 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 // SearchZettels searches the zettelkasten for zettels matching the query.
 // It returns a slice of Zettels.
 func (s *Storage) SearchZettels(term string) ([]Zettel, error) {
-	var zIDs []int
+	var results []Zettel
 	const query = `
-  	SELECT id
-  	FROM zettel_fts
-  	WHERE zettel_fts MATCH $1
-  	ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
-  `
-	if err := s.db.Select(&zIDs, query, term); err != nil {
+			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name
+			FROM zettel_fts
+			JOIN zettel z ON zettel_fts.rowid = z.id
+			WHERE zettel_fts MATCH $1
+			ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
+	`
+	if err := s.db.Select(&results, query, term); err != nil {
 		return nil, err
 	}
 
-	z := []Zettel{}
-	// TODO execute sql query to fill zettel fields given list of ids
-	return z, nil
+	for _, z := range results {
+		if err := zettelTags(s.db, &z); err != nil {
+			return nil, fmt.Errorf("Error getting tags: %v", err)
+		}
+		if err := zettelLinks(s.db, &z); err != nil {
+			return nil, fmt.Errorf("Error getting links: %v", err)
+		}
+	}
+	return results, nil
+}
+
+// zettelTags retrieves and assigns tags to the given zettel.
+func zettelTags(db *sqlx.DB, z *Zettel) error {
+	const tagQuery = `
+			SELECT t.*
+			FROM tag t
+			JOIN zettel_tags zt ON t.id = zt.tag_id
+			WHERE zt.zettel_id = $1;
+	`
+	return db.Select(&z.Tags, tagQuery, z.ID)
+}
+
+// zettelLinks retrieves and assigns zettel links to the given zettel.
+func zettelLinks(db *sqlx.DB, z *Zettel) error {
+	const linkQuery = `
+			SELECT * FROM link
+			WHERE from_zettel_id = $1;
+	`
+	return db.Select(&z.Links, linkQuery, z.ID)
 }
 
 // UpdateDB initializes the database, retrieve zet state from the
