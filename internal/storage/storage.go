@@ -28,6 +28,13 @@ type dir struct {
 	Name string `db:"name"` // unique directory name
 }
 
+type ResultZettel struct {
+	Zettel
+	TitleSnippet string `db:"title_snippet"`
+	BodySnippet  string `db:"body_snippet"`
+	TagsSnippet  string `db:"tags_snippet"`
+}
+
 type Zettel struct {
 	ID      int    `db:"id"`    // unique id
 	Name    string `db:"name"`  // name of file
@@ -72,24 +79,35 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 
 // SearchZettels searches the zettelkasten for zettels matching the query.
 // It returns a slice of Zettels.
-func (s *Storage) SearchZettels(term string) ([]Zettel, error) {
-	var results []Zettel
-	const query = `
-			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name
+func (s *Storage) SearchZettels(term string, hl bool) ([]ResultZettel, error) {
+	var results []ResultZettel
+	start := ``
+	end := ``
+	if hl {
+		// If highlighting enabled, set start and end highlight match.
+		start = `[red]`
+		end = `[white]`
+	}
+	query := `
+			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name,
+				snippet(zettel_fts, 0, '` + start + `', '` + end + `', '...', 15) AS title_snippet,
+				snippet(zettel_fts, 1, '` + start + `', '` + end + `', '...', 15) AS body_snippet,
+      	snippet(zettel_fts, 2, '` + start + `', '` + end + `', '...', 15) AS tags_snippet
 			FROM zettel_fts
 			JOIN zettel z ON zettel_fts.rowid = z.id
-			WHERE zettel_fts MATCH $1
+			WHERE zettel_fts MATCH LOWER($1)
 			ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
 	`
-	if err := s.db.Select(&results, query, term); err != nil {
+
+	if err := s.db.Select(&results, query, strings.ToLower(term)); err != nil {
 		return nil, err
 	}
 
 	for _, z := range results {
-		if err := zettelTags(s.db, &z); err != nil {
+		if err := zettelTags(s.db, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
-		if err := zettelLinks(s.db, &z); err != nil {
+		if err := zettelLinks(s.db, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
 	}
