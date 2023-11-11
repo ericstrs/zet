@@ -481,7 +481,7 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 		return fmt.Errorf("Error inserting zettel record: %v", err)
 	}
 
-	// Insert any new links
+	// Insert links
 	for _, l := range z.Links {
 		_, err = tx.Exec(insertLinksSQL, l.Content, id, l.ToZettelID)
 		if err != nil {
@@ -489,6 +489,7 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 		}
 	}
 
+	// Insert tags
 	if err := insertTags(tx, id, z.Tags); err != nil {
 		return fmt.Errorf("Error inserting tags: %v", err)
 	}
@@ -696,26 +697,23 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 	for _, tag := range tags {
 		var tagID int
 
-		// Try to insert the tag into the tag table. If it already exists, do nothing.
-		// If the tag is successfully inserted, its ID will be returned.
-		err := tx.QueryRow(insertTagSQL, tag.Name).Scan(&tagID)
-		if err != nil && err != sql.ErrNoRows {
-			// If the error is not 'no rows in result set' then it's an actual error
-			return err
-		}
-
-		// If the tag already exists, its ID wasn't returned, so retrieve it
-		if err == sql.ErrNoRows {
-			err = tx.QueryRow(selectTagIDSQL, tag.Name).Scan(&tagID)
+		// First, try to find the ID of the tag if it already exists
+		err := tx.QueryRow(selectTagIDSQL, tag.Name).Scan(&tagID)
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return fmt.Errorf("Failed to get tag id: %v", err)
+			}
+			// The tag doesn't exist, insert it and retrieve id.
+			err = tx.QueryRow(insertTagSQL, tag.Name).Scan(&tagID)
 			if err != nil {
-				return err
+				return fmt.Errorf("Error inserting tag: %v", err)
 			}
 		}
 
 		// Insert the zettel-tag association into the zettel_tags table
 		_, err = tx.Exec(insertZettelTagSQL, zettelID, tagID)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error inserting zettel-tag link: %v", err)
 		}
 	}
 
