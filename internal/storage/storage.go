@@ -53,26 +53,17 @@ type Link struct {
 
 // AllZettels returns all existing zettel files.
 func (s *Storage) AllZettels() ([]Zettel, error) {
-	const (
-		query    = `SELECT * FROM zettel;`
-		tagQuery = `
-			SELECT tag.* FROM tag
-			JOIN zettel_tags ON tag.id = zettel_tags.tag_id
-			WHERE zettel_id = $1;`
-		linkQuery = `
-			SELECT * FROM link
-			WHERE from_zettel_id = $1;`
-	)
+	const query = `SELECT * FROM zettel;`
 	zettels := []Zettel{}
 	if err := s.db.Select(&zettels, query); err != nil {
 		return nil, fmt.Errorf("Error getting zettels records: %v", err)
 	}
 	// Fetch tags and links for this zettel
 	for _, z := range zettels {
-		if err := s.db.Select(&z.Tags, tagQuery, z.ID); err != nil {
+		if err := zettelTags(s.db, &z); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
-		if err := s.db.Select(&z.Links, linkQuery, z.ID); err != nil {
+		if err := zettelLinks(s.db, &z); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
 	}
