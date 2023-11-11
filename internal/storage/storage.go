@@ -353,14 +353,6 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		modTime := info.ModTime().Truncate(time.Second)
 		z.Mtime = modTime.Format(time.RFC3339)
 
-		// Check if this is a new or existing file for this particular
-		// zettel.
-		f, exists := existingFiles[z.Name]
-		ft, err := isoToTime(f.Mtime)
-		if err != nil {
-			return err
-		}
-
 		fp := filepath.Join(dirPath, z.Name)
 		contentBytes, err := os.ReadFile(fp)
 		if err != nil {
@@ -370,13 +362,18 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		content := string(contentBytes)
 		splitZettel(tx, &z, content)
 
-		// If the file doesn't exist in this zettel, insert it into the
-		// database.
+		f, exists := existingFiles[z.Name]
 		if !exists {
 			if err := insertFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to insert new file: %v", err)
 			}
 			continue
+		}
+
+		z.ID = f.ID
+		ft, err := isoToTime(f.Mtime)
+		if err != nil {
+			return err
 		}
 
 		// If the file has been modified since last recorded, make the
