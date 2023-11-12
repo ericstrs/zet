@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -45,51 +47,7 @@ func getTestTransaction() (*sqlx.Tx, error) {
 }
 
 func setupTestDB(db *sqlx.DB) error {
-	// Create your tables here
-	// For example
-
-	const query = `
-      CREATE TABLE IF NOT EXISTS dir (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL  -- Unique identifier for the zettel
-      );
-
-      CREATE TABLE IF NOT EXISTS zettel (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,            -- Name of the file
-        title TEXT NOT NULL,           -- File body
-        body TEXT NOT NULL,            -- File body
-        mtime TEXT NOT NULL,           -- Last modification time
-        dir_name TEXT NOT NULL,        -- Name of the directory this file belongs to
-        FOREIGN KEY(dir_name) REFERENCES Directories(name) -- Reference to parent directory
-      );
-
-			-- Table for storing zettel links
-      CREATE TABLE IF NOT EXISTS link (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL,
-        from_zettel_id INTEGER NOT NULL,
-        to_zettel_id INTEGER NOT NULL,
-				UNIQUE(content, from_zettel_id, to_zettel_id),
-        FOREIGN KEY(from_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE,
-        FOREIGN KEY(to_zettel_id) REFERENCES zettel(id) ON DELETE CASCADE
-      );
-
-      -- Table for storing zettel tags
-      CREATE TABLE IF NOT EXISTS tag (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE
-      );
-
-      -- Many-to-many relationship table between zettels and tags
-      CREATE TABLE IF NOT EXISTS zettel_tags (
-        zettel_id INTEGER NOT NULL,            -- ID of the zettel
-        tag_id INTEGER NOT NULL,               -- ID of the tag
-        PRIMARY KEY(zettel_id, tag_id),        -- Composite primary key
-        FOREIGN KEY(zettel_id) REFERENCES zettels(id) ON DELETE CASCADE,
-        FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
-      );`
-	_, err := db.Exec(query)
+	_, err := db.Exec(tablesSQL)
 	return err
 }
 
@@ -202,58 +160,21 @@ func ExampleProcessZettels_EmptyDB() {
 }
 
 func ExampleProcessZettels_Update() {
-	tx, err := getTestTransaction()
+	existingZettels := getTestZettelMap()
+	db, err := insertTestZettelMap(existingZettels)
 	if err != nil {
-		fmt.Printf("Failed to establish database connection: %v.\n", err)
+		fmt.Printf("Error inserting zettel map: %v", err)
+		return
+	}
+	defer db.Close()
+	tx, err := db.Beginx()
+	if err != nil {
+		fmt.Printf("Error starting tx: %v", err)
 		return
 	}
 	defer tx.Rollback()
 
 	testZetDir := filepath.Join("..", "testdata", "zet")
-	existingZettels := getTestZettelMap()
-
-	const dirsQuery = `
-    INSERT INTO dir (name)
-    VALUES ($1);
-    `
-
-	dirs := []string{"20231028012959", "20231028013010", "20231028013031"}
-	for _, d := range dirs {
-		_, err := tx.Exec(dirsQuery, d)
-		if err != nil {
-			fmt.Printf("Failed to insert existing dirs: %v\n", err)
-			return
-		}
-	}
-
-	const query = `
-    INSERT INTO zettel (name, title, body, mtime, dir_name)
-    VALUES ($1, $2, $3, $4, $5);
-    `
-
-	// Create an array to hold all files before inserting them into the database
-	var allFiles []Zettel
-
-	// Collect all files from existingZettels into the allFiles slice
-	for _, filesMap := range existingZettels {
-		for _, f := range filesMap {
-			allFiles = append(allFiles, f)
-		}
-	}
-
-	// Sort the allFiles slice by ID
-	sort.Slice(allFiles, func(i, j int) bool {
-		return allFiles[i].ID < allFiles[j].ID
-	})
-
-	for _, f := range allFiles {
-		// This will insert a new row into the 'files' table with the provided values
-		_, err := tx.Exec(query, f.Name, f.Title, f.Body, f.Mtime, f.DirName)
-		if err != nil {
-			fmt.Printf("Failed to insert existing files: %v\n", err)
-			return
-		}
-	}
 
 	if err := processZettels(tx, testZetDir, existingZettels); err != nil {
 		fmt.Printf("Failed to process zettels: %v\n", err)
@@ -281,12 +202,17 @@ func ExampleProcessZettels_Update() {
 
 func ExampleProcessZettels_Delete() {
 	existingZettels := getTestZettelMap()
-	tx, err := insertTestZettelMap(existingZettels)
-	defer tx.Rollback()
+	db, err := insertTestZettelMap(existingZettels)
 	if err != nil {
 		fmt.Printf("Error inserting zettel map: %v", err)
 		return
 	}
+	defer db.Close()
+	tx, err := db.Beginx()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
 
 	testZetDir := filepath.Join("..", "testdata", "zet")
 
@@ -347,7 +273,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231028012959"]["README.md"] = Zettel{
 		ID:    1,
 		Name:  "README.md",
-		Title: `# Zettel 1`,
+		Title: `Zettel 1`,
 		Body: `
 
         This is the zettel body`,
@@ -361,7 +287,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231028013010"]["README.md"] = Zettel{
 		ID:    2,
 		Name:  "README.md",
-		Title: `# Zettel 2`,
+		Title: `Zettel 2`,
 		Body: `
 
         This is the zettel body`,
@@ -375,7 +301,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231028013031"]["README.md"] = Zettel{
 		ID:      3,
 		Name:    "README.md",
-		Title:   `# Zettel 3`,
+		Title:   `Zettel 3`,
 		Body:    ``,
 		Links:   []Link{},
 		Tags:    []Tag{},
@@ -385,7 +311,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231028013031"]["outline.md"] = Zettel{
 		ID:      4,
 		Name:    "outline.md",
-		Title:   `# Outline`,
+		Title:   `Outline`,
 		Body:    ``,
 		Links:   []Link{},
 		Tags:    []Tag{},
@@ -395,7 +321,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231028013031"]["foo.md"] = Zettel{
 		ID:      5,
 		Name:    "foo.md",
-		Title:   `# Foo`,
+		Title:   `Foo`,
 		Body:    ``,
 		Links:   []Link{},
 		Tags:    []Tag{},
@@ -407,7 +333,7 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	existingZettels["20231031214058"]["README.md"] = Zettel{
 		ID:      6,
 		Name:    "README.md",
-		Title:   `# read`,
+		Title:   `read`,
 		Body:    ``,
 		Links:   []Link{},
 		Tags:    []Tag{},
@@ -417,53 +343,91 @@ func getTestZettelMap() map[string]map[string]Zettel {
 	return existingZettels
 }
 
-func insertTestZettelMap(existingZettels map[string]map[string]Zettel) (*sqlx.Tx, error) {
-	tx, err := getTestTransaction()
+func insertTestZettelMap(zm map[string]map[string]Zettel) (*sqlx.DB, error) {
+	const (
+		dirsSQL = `
+      INSERT INTO dir (name)
+      VALUES ($1);`
+		zettelSQL = `
+      INSERT INTO zettel (name, title, body, mtime, dir_name)
+      VALUES ($1, $2, $3, $4, $5);`
+		insertLinksSQL = `
+    	INSERT INTO link (content, from_zettel_id, to_zettel_id)
+    	VALUES ($1, $2, $3);`
+		insertTagSQL = `INSERT INTO tag (name)
+      VALUES ($1) ON CONFLICT(name)
+      DO NOTHING RETURNING id`
+		selectTagIDSQL = `SELECT id FROM tag
+      WHERE name = $1`
+		insertZettelTagSQL = `INSERT INTO zettel_tags (zettel_id, tag_id)
+      VALUES ($1, $2)`
+	)
+
+	db, err := getDBConnection()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to establish database connection: %v.\n", err)
 	}
 
-	const dirsQuery = `
-      INSERT INTO dir (name)
-      VALUES ($1);
-      `
-
 	dirs := []string{"20231028012959", "20231028013010", "20231028013031", "20231031214058"}
 	for _, d := range dirs {
-		_, err := tx.Exec(dirsQuery, d)
+		_, err := db.Exec(dirsSQL, d)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to insert existing dirs: %v\n", err)
 		}
 	}
 
-	const query = `
-      INSERT INTO zettel (name, title, body, mtime, dir_name)
-      VALUES ($1, $2, $3, $4, $5);
-      `
-
 	// Create an array to hold all files before inserting them into the database
-	var allFiles []Zettel
+	var zettels []Zettel
 
-	// Collect all files from existingZettels into the allFiles slice
-	for _, filesMap := range existingZettels {
-		for _, f := range filesMap {
-			allFiles = append(allFiles, f)
+	// Collect all files from zettel map into the zettels slice
+	for _, filesMap := range zm {
+		for _, z := range filesMap {
+			zettels = append(zettels, z)
 		}
 	}
 
-	// Sort the allFiles slice by ID
-	sort.Slice(allFiles, func(i, j int) bool {
-		return allFiles[i].ID < allFiles[j].ID
+	// Sort the zettels slice by ID
+	sort.Slice(zettels, func(i, j int) bool {
+		return zettels[i].ID < zettels[j].ID
 	})
 
-	for _, f := range allFiles {
+	for _, z := range zettels {
 		// This will insert a new row into the 'files' table with the provided values
-		_, err := tx.Exec(query, f.Name, f.Title, f.Body, f.Mtime, f.DirName)
+		_, err := db.Exec(zettelSQL, z.Name, z.Title, z.Body, z.Mtime, z.DirName)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to insert existing files: %v\n", err)
 		}
+		// Insert links
+		for _, l := range z.Links {
+			if _, err = db.Exec(insertLinksSQL, l.Content, z.ID, l.ToZettelID); err != nil {
+				return nil, fmt.Errorf("Error inserting links: %v", err)
+			}
+		}
+		// Insert tags
+		for _, tag := range z.Tags {
+			var tagID int
+
+			// First, try to find the ID of the tag if it already exists
+			err := db.QueryRow(selectTagIDSQL, tag.Name).Scan(&tagID)
+			if err != nil {
+				if err != sql.ErrNoRows {
+					// If the error is not 'no rows in result set' then it's an actual error
+					return nil, err
+				}
+				// If tag doesn't exists, insert it and retrieve id.
+				if err = db.QueryRow(insertTagSQL, tag.Name).Scan(&tagID); err != nil {
+					return nil, err
+				}
+			}
+
+			// Insert the zettel-tag association into the zettel_tags table
+			_, err = db.Exec(insertZettelTagSQL, z.ID, tagID)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	return tx, nil
+	return db, nil
 }
 
 func ExampleAddZettel() {
@@ -531,12 +495,17 @@ func ExampleProcessFiles_EmptyDB() {
 
 func ExampleSplitZettel() {
 	existingZettels := getTestZettelMap()
-	tx, err := insertTestZettelMap(existingZettels)
-	defer tx.Rollback()
+	db, err := insertTestZettelMap(existingZettels)
 	if err != nil {
 		fmt.Printf("Error inserting zettel map: %v", err)
 		return
 	}
+	defer db.Close()
+	tx, err := db.Beginx()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
 
 	const e = `# Example Title
 
@@ -580,4 +549,37 @@ See:
 	// Tags:
 	// 	tag1
 	// 	tag2
+}
+
+func ExampleSearchZettels() {
+	existingZettels := getTestZettelMap()
+	db, err := insertTestZettelMap(existingZettels)
+	if err != nil {
+		fmt.Printf("Error inserting zettel map: %v", err)
+		return
+	}
+	defer db.Close()
+
+	s := Storage{db: db}
+
+	term := `zettel productive`
+	zettels, err := s.SearchZettels(term, true)
+	if err != nil {
+		fmt.Printf("Error searching zettels: %v", err)
+		return
+	}
+
+	for _, z := range zettels {
+		fmt.Println(z.DirName + " " + z.TitleSnippet)
+		if z.BodySnippet != "" {
+			fmt.Println(z.BodySnippet)
+		}
+		if z.TagsSnippet != "" {
+			hashedTags := "\t\t#" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
+			fmt.Println(hashedTags)
+		}
+	}
+
+	// Output:
+	// blah
 }
