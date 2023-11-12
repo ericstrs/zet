@@ -90,9 +90,9 @@ func (s *Storage) SearchZettels(term string, hl bool) ([]ResultZettel, error) {
 	}
 	query := `
 			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name,
-				snippet(zettel_fts, 0, '` + start + `', '` + end + `', '...', 15) AS title_snippet,
-				snippet(zettel_fts, 1, '` + start + `', '` + end + `', '...', 15) AS body_snippet,
-      	snippet(zettel_fts, 2, '` + start + `', '` + end + `', '...', 15) AS tags_snippet
+				COALESCE(snippet(zettel_fts, 0, '` + start + `', '` + end + `', '...', 15), '') AS title_snippet,
+				COALESCE(snippet(zettel_fts, 1, '` + start + `', '` + end + `', '...', 15), '') AS body_snippet,
+      	COALESCE(snippet(zettel_fts, 2, '` + start + `', '` + end + `', '...', 15), '') AS tags_snippet
 			FROM zettel_fts
 			JOIN zettel z ON zettel_fts.rowid = z.id
 			WHERE zettel_fts MATCH LOWER($1)
