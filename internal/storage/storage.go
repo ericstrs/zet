@@ -77,22 +77,17 @@ func (s *Storage) AllZettels() ([]Zettel, error) {
 	return zettels, nil
 }
 
-// SearchZettels searches the zettelkasten for zettels matching the query.
-// It returns a slice of Zettels.
-func (s *Storage) SearchZettels(term string, hl bool) ([]ResultZettel, error) {
+// SearchZettels searches the zettelkasten for zettels matching the
+// query. The before and after arguments are used for wrapping any
+// matching text. It returns a slice of Zettels.
+func (s *Storage) SearchZettels(term, before, after string) ([]ResultZettel, error) {
+	term = preprocessInput(term)
 	var results []ResultZettel
-	start := ``
-	end := ``
-	if hl {
-		// If highlighting enabled, set start and end highlight match.
-		start = `[red]`
-		end = `[white]`
-	}
 	query := `
 			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name,
-				COALESCE(snippet(zettel_fts, 0, '` + start + `', '` + end + `', '...', 15), '') AS title_snippet,
-				COALESCE(snippet(zettel_fts, 1, '` + start + `', '` + end + `', '...', 15), '') AS body_snippet,
-      	COALESCE(snippet(zettel_fts, 2, '` + start + `', '` + end + `', '...', 15), '') AS tags_snippet
+				COALESCE(snippet(zettel_fts, 0, '` + before + `', '` + after + `', '...', 15), '') AS title_snippet,
+				COALESCE(snippet(zettel_fts, 1, '` + before + `', '` + after + `', '...', 15), '') AS body_snippet,
+      	COALESCE(snippet(zettel_fts, 2, '` + before + `', '` + after + `', '...', 15), '') AS tags_snippet
 			FROM zettel_fts
 			JOIN zettel z ON zettel_fts.rowid = z.id
 			WHERE zettel_fts MATCH LOWER($1)
@@ -112,6 +107,24 @@ func (s *Storage) SearchZettels(term string, hl bool) ([]ResultZettel, error) {
 		}
 	}
 	return results, nil
+}
+
+// preprocessInput processes user input for fts5 search.
+func preprocessInput(s string) string {
+	s = preprocessTags(s)
+	return s
+}
+
+// preprocessTags handles the conversion of "#tag" syntax into a
+// FTS-friendly string.
+func preprocessTags(s string) string {
+	re := regexp.MustCompile(`#\w+`)
+	return re.ReplaceAllStringFunc(s, func(tag string) string {
+		// Remove '#' and prepare tag for FTS query
+		tag = strings.TrimPrefix(tag, "#")
+		// Depending on your FTS setup, you might want to format this differently
+		return "tags:" + tag
+	})
 }
 
 // zettelTags retrieves and assigns tags to the given zettel.
