@@ -22,7 +22,7 @@ type SearchUI struct {
 }
 
 // NewSearchUI creates and initializes a new SearchUI.
-func NewSearchUI(s *storage.Storage, zetPath, editor string) *SearchUI {
+func NewSearchUI(s *storage.Storage, query, zetPath, editor string) *SearchUI {
 	sui := &SearchUI{
 		app:         tview.NewApplication(),
 		inputField:  tview.NewInputField(),
@@ -31,13 +31,13 @@ func NewSearchUI(s *storage.Storage, zetPath, editor string) *SearchUI {
 		screenWidth: 50,
 	}
 
-	sui.setupUI(zetPath, editor)
+	sui.setupUI(query, zetPath, editor)
 
 	return sui
 }
 
 // setupUI configures the UI elements.
-func (sui *SearchUI) setupUI(zetPath, editor string) {
+func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 	sui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEscape:
@@ -66,8 +66,6 @@ func (sui *SearchUI) setupUI(zetPath, editor string) {
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEnter {
 				text := sui.inputField.GetText()
-				// TODO: in the background, save search term
-				// Change focus to results list.
 				sui.performSearch(text)
 				sui.list.SetSelectable(true, false)
 				sui.app.SetFocus(sui.list)
@@ -76,7 +74,12 @@ func (sui *SearchUI) setupUI(zetPath, editor string) {
 
 	sui.list.SetBorder(true)
 	sui.listInput(zetPath, editor)
-	sui.displayAll(zettels)
+	switch query {
+	case "":
+		sui.displayAll(zettels)
+	default:
+		sui.inputField.SetText(query)
+	}
 
 	// Create a Flex layout to position the inputField and list
 	flex := tview.NewFlex().
@@ -104,7 +107,9 @@ func (sui *SearchUI) performSearch(query string) {
 	if query == "" {
 		return
 	}
-	zettels, err := sui.storage.SearchZettels(query, true)
+	start := `[red]`
+	end := `[white]`
+	zettels, err := sui.storage.SearchZettels(query, start, end)
 	if err != nil {
 		zettels = []storage.ResultZettel{storage.ResultZettel{TitleSnippet: "Incorrect syntax"}}
 	}
