@@ -563,7 +563,7 @@ func ExampleSearchZettels() {
 	s := Storage{db: db}
 
 	term := `zettel productive`
-	zettels, err := s.SearchZettels(term, true)
+	zettels, err := s.SearchZettels(term, `[red]`, `[white]`)
 	if err != nil {
 		fmt.Printf("Error searching zettels: %v", err)
 		return
@@ -572,7 +572,7 @@ func ExampleSearchZettels() {
 	for _, z := range zettels {
 		fmt.Println(z.DirName + " " + z.TitleSnippet)
 		if z.BodySnippet != "" {
-			fmt.Println(z.BodySnippet)
+			fmt.Printf("%q\n", z.BodySnippet)
 		}
 		if z.TagsSnippet != "" {
 			hashedTags := "\t\t#" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
@@ -581,5 +581,7 @@ func ExampleSearchZettels() {
 	}
 
 	// Output:
-	// blah
+	// 20231028013010 [red]Zettel[white] 2
+	// "\n\n        This is the [red]zettel[white] body"
+	//		#[red]productivity[white] #pkms
 }
