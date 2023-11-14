@@ -61,7 +61,7 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 		return false
 	})
 
-	zettels, _ := sui.storage.AllZettels("")
+	zettels, _ := sui.storage.AllZettels(`dir_name DESC`)
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30).
 		SetChangedFunc(func(text string) {
@@ -82,6 +82,8 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 	sui.ipInput(zetPath, editor)
 
 	sui.list.SetBorder(true)
+	style := tcell.StyleDefault.Background(tcell.Color107).Foreground(tcell.ColorBlack)
+	sui.list.SetSelectedStyle(style)
 	sui.listInput(zetPath, editor)
 	switch query {
 	case "":
@@ -132,9 +134,10 @@ func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
 		// Add zettel dir and title
 		s := `[yellow]` + z.DirName + `[white]` + ` ` + z.Title
 		sui.list.SetCell(row, 0, tview.NewTableCell(s).
-			SetReference(&z))
+			SetReference(z))
 		row++
 	}
+	sui.list.ScrollToBeginning()
 }
 
 // performSearch gets result zettels to update the results list.
@@ -184,13 +187,23 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 				SetSelectable(false))
 			row++
 		}
+		list.SetCell(row, 0, tview.NewTableCell("").SetSelectable(false))
+		row++
 	}
+	sui.list.ScrollToBeginning()
 }
 
 // listInput handles input capture for the list.
 func (sui *SearchUI) listInput(zetPath, editor string) {
 	sui.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+
+		case 'M': // move to middle of the visible window
+			row, _ := sui.list.GetOffset()
+			_, _, _, height := sui.list.GetInnerRect()
+			sui.list.Select(row+height/2, 0)
+			return nil
+		case 'L': // move to bottom of the visible window
 		case tcell.KeyEscape:
 			sui.app.Stop()
 		default:
@@ -214,8 +227,35 @@ func (sui *SearchUI) listInput(zetPath, editor string) {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				default:
-					log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel.")
+					//log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel.")
+					log.Printf("Type not supported: %T\n", z)
 				}
+				return nil
+			case 'H': // move to top of the visible window
+				row, _ := sui.list.GetOffset()
+				sui.list.Select(row, 0)
+				return nil
+			case 'M': // move to middle of the visible window
+				row, _ := sui.list.GetOffset()
+				_, _, _, height := sui.list.GetInnerRect()
+				sui.list.Select(row+height/2, 0)
+				return nil
+			case 'L': // move to bottom of the visible window
+				row, _ := sui.list.GetOffset()
+				_, _, _, height := sui.list.GetInnerRect()
+				sui.list.Select(row+height-1, 0)
+				return nil
+			case 'b': // page up (Ctrl-B)
+				return tcell.NewEventKey(tcell.KeyCtrlB, 0, tcell.ModNone)
+			case ' ': // page down
+				row, _ := sui.list.GetOffset()
+				_, _, _, height := sui.list.GetInnerRect()
+				newRow := row + height
+				if newRow > sui.list.GetRowCount()-1 {
+					newRow = sui.list.GetRowCount() - 1
+				}
+				sui.list.SetOffset(newRow, 0)
+				sui.list.Select(newRow, 0)
 				return nil
 			case 'q': // quit app
 				sui.app.Stop()
