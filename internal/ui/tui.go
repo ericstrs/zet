@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/iuiq/zet"
 	"github.com/iuiq/zet/internal/storage"
 	"github.com/rivo/tview"
 )
@@ -52,7 +53,7 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 		sui.screenWidth = width
 		return false
 	})
-	zettels, _ := sui.storage.AllZettels()
+	zettels, _ := sui.storage.AllZettels("")
 
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30).
@@ -71,6 +72,17 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 				sui.app.SetFocus(sui.list)
 			}
 		})
+	sui.inputField.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		// If ctrl+enter pressed, create and open zettel.
+		if e.Modifiers() == 2 && e.Rune() == 10 {
+			text := sui.inputField.GetText()
+			sui.app.Stop()
+			if err := zet.Add(zetPath, editor, text, "", "", true); err != nil {
+				log.Printf("Failed to add zettel: %v", err)
+			}
+		}
+		return e
+	})
 
 	sui.list.SetBorder(true)
 	sui.listInput(zetPath, editor)
