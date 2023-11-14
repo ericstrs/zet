@@ -76,11 +76,12 @@ type Link struct {
 // AllZettels returns all existing zettel files with optional sorting.
 // Optional argument should be a valid SQL ORDER BY clause, e.g., "mtime DESC".
 func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
+	zettels := []Zettel{}
 	query := `SELECT * FROM zettel`
 	if sort != "" {
 		query = fmt.Sprintf("%s ORDER BY %s", query, sort)
 	}
-	zettels := []Zettel{}
+
 	if err := s.db.Select(&zettels, query); err != nil {
 		return nil, fmt.Errorf("Error getting zettels records: %v", err)
 	}
@@ -139,9 +140,7 @@ func preprocessInput(s string) string {
 func preprocessTags(s string) string {
 	re := regexp.MustCompile(`#\w+`)
 	return re.ReplaceAllStringFunc(s, func(tag string) string {
-		// Remove '#' and prepare tag for FTS query
 		tag = strings.TrimPrefix(tag, "#")
-		// Depending on your FTS setup, you might want to format this differently
 		return "tags:" + tag
 	})
 }
@@ -175,44 +174,34 @@ func UpdateDB(zetPath string) (*Storage, error) {
 		return nil, fmt.Errorf("Failed to initialize database: %v.\n", err)
 	}
 	db := s.db
-
 	zm, err := s.zettelsMap()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get zettels: %v.\n", err)
 	}
-
 	tx, err := db.Beginx()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create transaction: %v\n", err)
 	}
-
 	if err := processZettels(tx, zetPath, zm); err != nil {
 		return nil, fmt.Errorf("Failed to process zettels: %v.\n", err)
 	}
-
 	return s, tx.Commit()
 }
 
 // Init creates the database if it doesn't exist and returns the
 // database connection.
 func Init() (*Storage, error) {
-	// Resolve zet database path.
 	dbPath := os.Getenv("ZET_DB_PATH")
 	if dbPath == "" {
-		return nil, errors.New("Environment variable ZET_DB_PATH must be set")
+		return nil, errors.New("environment variable ZET_DB_PATH must be set")
 	}
-
-	// Connect to SQLite database
 	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to database: %v", err)
 	}
-
-	_, err = db.Exec(tablesSQL)
-	if err != nil {
+	if _, err = db.Exec(tablesSQL); err != nil {
 		return nil, err
 	}
-
 	return &Storage{db: db}, nil
 }
 
@@ -224,10 +213,7 @@ func (s *Storage) Close() {
 // and put them into a map. It returns a map that includes each zettel
 // directory and all non-directory files. The value is a file struct.
 func (s *Storage) zettelsMap() (map[string]map[string]Zettel, error) {
-	// Map to hold existing zettels and their files from the database
 	var zm = make(map[string]map[string]Zettel)
-	zettels := []Zettel{}
-
 	zettels, err := s.AllZettels("")
 	if err != nil {
 		return zm, fmt.Errorf("Failed to get all zettels: %v", err)
@@ -237,10 +223,8 @@ func (s *Storage) zettelsMap() (map[string]map[string]Zettel, error) {
 		if _, exists := zm[z.DirName]; !exists {
 			zm[z.DirName] = make(map[string]Zettel)
 		}
-
 		zm[z.DirName][z.Name] = z
 	}
-
 	return zm, nil
 }
 
@@ -265,8 +249,8 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 		// Check if this is a new or existing zettel.
 		_, exists := zm[dirName]
 
-		// For *new* zettels: Insert the dir and all its files (that
-		// aren't a dir) into the database.
+		// If zettel is new, insert the directory and all its files (that
+		// aren't a directory) into the database.
 		if !exists {
 			if err := addZettel(tx, dirPath); err != nil {
 				log.Printf("Failed to insert a zettel: %v.\n", err)
@@ -308,7 +292,7 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	}
 
 	// For each file that is NOT a directory:
-	// If new file Add new files or update existing files in the database.
+	// If new file, add new files or update existing files in the database.
 	for _, file := range files {
 		z := Zettel{}
 		z.Name = file.Name()
@@ -342,9 +326,9 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	return nil
 }
 
-// deleteZettels deletes given zettels from the database.
+// deleteZettels deletes given zettels from the database. It deletes the
+// files in each directory and then deletes the directory.
 func deleteZettels(tx *sqlx.Tx, zm map[string]map[string]Zettel) error {
-	// Delete the files in each dir and then delete the dir.
 	for _, filesMap := range zm {
 		if err := deleteFiles(tx, filesMap); err != nil {
 			return fmt.Errorf("Failed to delete files: %v", err)
@@ -353,7 +337,6 @@ func deleteZettels(tx *sqlx.Tx, zm map[string]map[string]Zettel) error {
 	if err := deleteDirs(tx, zm); err != nil {
 		log.Printf("Failed to delete a zettel: %v.\n", err)
 	}
-
 	return nil
 }
 
@@ -439,8 +422,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		delete(zm[dirName], z.Name)
 	}
 
-	err = deleteFiles(tx, existingFiles)
-	if err != nil {
+	if err := deleteFiles(tx, existingFiles); err != nil {
 		return fmt.Errorf("Failed to delete files: %v", err)
 	}
 
@@ -454,7 +436,7 @@ func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
 	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
-	tagRegex := regexp.MustCompile(`^(?:\t\t| {4})#[a-zA-Z]+`)
+	tagRegex := regexp.MustCompile(`^ {4,}#[a-zA-Z]+`)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
@@ -558,13 +540,12 @@ func updateFile(tx *sqlx.Tx, z Zettel) error {
 			WHERE id=$4;`
 	)
 	var id int
-	err := tx.Get(&id, idQuery, z.Name, z.DirName)
-	if err != nil {
+	if err := tx.Get(&id, idQuery, z.Name, z.DirName); err != nil {
 		return fmt.Errorf("Failed to get zettel id: %v", err)
 	}
 
 	// Update zettel table record
-	_, err = tx.Exec(zettelQuery, z.Title, z.Body, z.Mtime, id)
+	_, err := tx.Exec(zettelQuery, z.Title, z.Body, z.Mtime, id)
 	if err != nil {
 		return fmt.Errorf("Error updating zettel table record: %v", err)
 	}
@@ -656,8 +637,7 @@ func addLinks(tx *sqlx.Tx, zettelID int, links []Link) error {
 func removeLinks(tx *sqlx.Tx, fromZettelID int, links []Link) error {
 	const query = `DELETE FROM link WHERE id=$1 AND from_zettel_id=$2`
 	for _, l := range links {
-		_, err := tx.Exec(query, l.ID, fromZettelID)
-		if err != nil {
+		if _, err := tx.Exec(query, l.ID, fromZettelID); err != nil {
 			return fmt.Errorf("Failed to remove zettel links: %v", err)
 		}
 	}
@@ -807,15 +787,14 @@ func deleteFiles(tx *sqlx.Tx, zm map[string]Zettel) error {
 
 	// Iterate through each remaining file in the directory
 	for _, z := range zm {
-		_, err := stmt.Exec(z.ID)
-		if err != nil {
+		if _, err := stmt.Exec(z.ID); err != nil {
 			// Log the error but continue deleting other files
 			log.Printf("Error deleting file with id %d: %v", z.ID, err)
 		}
 	}
 
 	if err := cleanTags(tx); err != nil {
-		return err
+		return fmt.Errorf("Error cleaning tags: %v", err)
 	}
 
 	return nil
@@ -850,8 +829,7 @@ func deleteDirs(tx *sqlx.Tx, zm map[string]map[string]Zettel) error {
 
 	// Iterate through each remaining directory
 	for dirName := range zm {
-		_, err := stmt.Exec(dirName)
-		if err != nil {
+		if _, err := stmt.Exec(dirName); err != nil {
 			// Log the error but continue deleting other directories
 			log.Printf("Error deleting file with name %s: %v", dirName, err)
 		}
