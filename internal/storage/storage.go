@@ -30,9 +30,24 @@ type dir struct {
 
 type ResultZettel struct {
 	Zettel
+
+	// TitleSnippet holds a snippet of the zettel's title as returned by
+	// the SQLite snippet function. It's typically a substring of the
+	// title that matches the search query, often with added context for
+	// highlighting support.
 	TitleSnippet string `db:"title_snippet"`
-	BodySnippet  string `db:"body_snippet"`
-	TagsSnippet  string `db:"tags_snippet"`
+
+	// BodySnippet contains a snippet of the zettel's body as returned by
+	// the SQLite snippet function. Similar to TitleSnippet, it includes
+	// a part of the body text that matches the search criteria. If a
+	// match was found, it will be surrounded by additional text to
+	// support highlighting.
+	BodySnippet string `db:"body_snippet"`
+
+	// TagsSnippet holds a snippet of the zettel's tag line returned by the
+	// SQLite snippet function. If a match was found, it will be
+	// surrounded by additional text to support highlighting.
+	TagsSnippet string `db:"tags_snippet"`
 }
 
 type Zettel struct {
