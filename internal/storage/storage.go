@@ -238,8 +238,8 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 
 	// Scan the root directory
 	for _, dir := range dirs {
-		// Skip any files not directory type
-		if !dir.IsDir() {
+		// Skip any files not directory type and skip git directory.
+		if !dir.IsDir() || dir.Name() != `.git` {
 			continue
 		}
 
@@ -253,7 +253,7 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 		// aren't a directory) into the database.
 		if !exists {
 			if err := addZettel(tx, dirPath); err != nil {
-				log.Printf("Failed to insert a zettel: %v.\n", err)
+				log.Printf("Failed to insert a zettel: %v. Dir name: %s\n", err, dirName)
 			}
 			continue // Move to the next directory
 		}
@@ -295,12 +295,12 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	// If new file, add new files or update existing files in the database.
 	for _, file := range files {
 		z := Zettel{}
-		z.Name = file.Name()
 		// Filter out sub-directories and files that are not markdown.
-		if !strings.HasSuffix(z.Name, ".md") || file.IsDir() {
+		if !strings.HasSuffix(file.Name(), ".md") || file.IsDir() {
 			continue
 		}
 		z.DirName = dirName
+		z.Name = file.Name()
 
 		info, err := file.Info()
 		if err != nil {
@@ -721,7 +721,7 @@ func insertTags(tx *sqlx.Tx, zettelID int, tags []Tag) error {
 		selectTagIDSQL = `SELECT id FROM tag
 			WHERE name = $1`
 		insertZettelTagSQL = `INSERT INTO zettel_tags (zettel_id, tag_id)
-			VALUES ($1, $2)`
+			VALUES ($1, $2) ON CONFLICT DO NOTHING`
 	)
 
 	for _, tag := range tags {
