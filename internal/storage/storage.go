@@ -205,6 +205,7 @@ func Init() (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
+// Close closes th database connection.
 func (s *Storage) Close() {
 	s.db.Close()
 }
@@ -212,6 +213,8 @@ func (s *Storage) Close() {
 // zettelsMap retrieves all existing zettels from the database
 // and put them into a map. It returns a map that includes each zettel
 // directory and all non-directory files. The value is a file struct.
+// Note: This may not reflect the flat files exactly since empty
+// directories are excluded from the database.
 func (s *Storage) zettelsMap() (map[string]map[string]Zettel, error) {
 	var zm = make(map[string]map[string]Zettel)
 	zettels, err := s.AllZettels("")
@@ -229,7 +232,8 @@ func (s *Storage) zettelsMap() (map[string]map[string]Zettel, error) {
 }
 
 // processZettels iterates over each zettel directory and its files to
-// keep the flat files and database in sync.
+// keep the flat files and database in sync. If a zettel directory does
+// not have any files in it, its excluded from the database.
 func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel) error {
 	dirs, err := os.ReadDir(zetPath)
 	if err != nil {
@@ -239,7 +243,7 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 	// Scan the root directory
 	for _, dir := range dirs {
 		// Skip any files not directory type and skip git directory.
-		if !dir.IsDir() || dir.Name() != `.git` {
+		if !dir.IsDir() || dir.Name() == `.git` {
 			continue
 		}
 
@@ -252,7 +256,11 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 		// If zettel is new, insert the directory and all its files (that
 		// aren't a directory) into the database.
 		if !exists {
-			if err := addZettel(tx, dirPath); err != nil {
+			files, err := os.ReadDir(dirPath)
+			if err != nil {
+				return fmt.Errorf("Error reading sub-directory: %v", err)
+			}
+			if err := addZettel(tx, dirPath, files); err != nil {
 				log.Printf("Failed to insert a zettel: %v. Dir name: %s\n", err, dirName)
 			}
 			continue // Move to the next directory
@@ -278,30 +286,30 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 
 // addZettel inserts a zettel directory into the database. This is
 // performed by inserting the zettel directory into the dirs table and
-// all of its files into the files table.
-func addZettel(tx *sqlx.Tx, dirPath string) error {
+// then attempting to insert all of its files into the files table.
+// If the given directory has zero files or does not contain any
+// README.md files, then this function does nothing.
+func addZettel(tx *sqlx.Tx, dirPath string, files []os.DirEntry) error {
+	if len(files) == 0 || !containsMD(files) {
+		return nil
+	}
+
 	dirName := path.Base(dirPath)
 	if err := insertDir(tx, dirName); err != nil {
 		return fmt.Errorf("Error inserting directory: %v", err)
 	}
 
-	// Fetch files inside this directory
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		return fmt.Errorf("Error reading sub-directory: %v", err)
-	}
-
 	// For each file that is NOT a directory:
 	// If new file, add new files or update existing files in the database.
 	for _, file := range files {
-		z := Zettel{}
 		// Filter out sub-directories and files that are not markdown.
 		if !strings.HasSuffix(file.Name(), ".md") || file.IsDir() {
 			continue
 		}
+
+		z := Zettel{}
 		z.DirName = dirName
 		z.Name = file.Name()
-
 		info, err := file.Info()
 		if err != nil {
 			return fmt.Errorf("Error reading file info: %v", err)
@@ -314,7 +322,6 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 		if err != nil {
 			return err
 		}
-
 		content := string(contentBytes)
 		splitZettel(tx, &z, content)
 
@@ -324,6 +331,16 @@ func addZettel(tx *sqlx.Tx, dirPath string) error {
 	}
 
 	return nil
+}
+
+// containsMD checks if a slice of files contains a README.md file.
+func containsMD(files []os.DirEntry) bool {
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".md") {
+			return true
+		}
+	}
+	return false
 }
 
 // deleteZettels deletes given zettels from the database. It deletes the
