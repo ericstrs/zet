@@ -87,7 +87,13 @@ func AddCmd(args []string) error {
 		stdin = strings.TrimSuffix(stdin, "\n")
 	}
 
-	if err := Add(c.ZetDir, c.Editor, title, body, stdin); err != nil {
+	var openZettel bool
+	// If no title and no body and no stdin, then open newly created zettel.
+	if title == "" && body == "" && stdin == "" {
+		openZettel = true
+	}
+	// Otherwise, just create the zettel without opening it.
+	if err := Add(c.ZetDir, c.Editor, title, body, stdin, openZettel); err != nil {
 		return err
 	}
 
@@ -118,7 +124,7 @@ func AddCmd(args []string) error {
 // Auto-linking is enabled by default. If calling the add command from
 // an existing zettel directory, the newly created zettel will have link
 // to existing zettel.
-func Add(path, editor, title, body, stdin string) error {
+func Add(path, editor, title, body, stdin string, open bool) error {
 	// Create new directory using the current isosec
 	is := Isosec()
 	zpath := filepath.Join(path, is)
@@ -166,8 +172,7 @@ func Add(path, editor, title, body, stdin string) error {
 		return fmt.Errorf("Failed write buffered data to new zettel %s: %v", zfpath, err)
 	}
 
-	// If no title and no body and no stdin, then open newly created zettel.
-	if title == "" && body == "" && stdin == "" {
+	if open {
 		if err := runCmd(zpath, editor, zfpath); err != nil {
 			return fmt.Errorf("Failed to open new zettel: %v", err)
 		}
