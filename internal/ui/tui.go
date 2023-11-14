@@ -15,10 +15,23 @@ import (
 )
 
 type SearchUI struct {
-	app         *tview.Application
-	inputField  *tview.InputField
-	list        *tview.Table
-	storage     *storage.Storage
+	// app is a reference to the tview application
+	app *tview.Application
+
+	// inputField is a UI element for text input, allowing users to enter
+	// their search queries. The entered text is used for search operations.
+	inputField *tview.InputField
+
+	// list represents a table view in the UI, used to display search
+	// results. Each row in the table can correspond to a different zettel
+	// title, tag line, or zettel.
+	list *tview.Table
+
+	// storage is a pointer to the Storage struct which handles
+	// interactions with the database.
+	storage *storage.Storage
+
+	// screenWidth holds the width of the screen in characters.
 	screenWidth int
 }
 
@@ -39,22 +52,16 @@ func NewSearchUI(s *storage.Storage, query, zetPath, editor string) *SearchUI {
 
 // setupUI configures the UI elements.
 func (sui *SearchUI) setupUI(query, zetPath, editor string) {
-	sui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEscape:
-			sui.app.Stop()
-		}
-		return event
-	})
+	sui.globalInput()
+
 	// Update screen width before drawing. This won't affect the current
 	// drawing, it sets the width for the next draw operation.
 	sui.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
-		width, _ := screen.Size()
-		sui.screenWidth = width
+		sui.screenWidth, _ = screen.Size()
 		return false
 	})
-	zettels, _ := sui.storage.AllZettels("")
 
+	zettels, _ := sui.storage.AllZettels("")
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30).
 		SetChangedFunc(func(text string) {
@@ -72,17 +79,7 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 				sui.app.SetFocus(sui.list)
 			}
 		})
-	sui.inputField.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		// If ctrl+enter pressed, create and open zettel.
-		if e.Modifiers() == 2 && e.Rune() == 10 {
-			text := sui.inputField.GetText()
-			sui.app.Stop()
-			if err := zet.Add(zetPath, editor, text, "", "", true); err != nil {
-				log.Printf("Failed to add zettel: %v", err)
-			}
-		}
-		return e
-	})
+	sui.ipInput(zetPath, editor)
 
 	sui.list.SetBorder(true)
 	sui.listInput(zetPath, editor)
@@ -102,6 +99,32 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 	sui.app.SetRoot(flex, true)
 }
 
+// globalInput handles input capture for the application.
+func (sui *SearchUI) globalInput() {
+	sui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			sui.app.Stop()
+		}
+		return event
+	})
+}
+
+// ipInput handles input capture for the inputField.
+func (sui *SearchUI) ipInput(zetPath, editor string) {
+	sui.inputField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// If ctrl+enter pressed, create and open zettel.
+		if event.Modifiers() == 2 && event.Rune() == 10 {
+			text := sui.inputField.GetText()
+			sui.app.Stop()
+			if err := zet.Add(zetPath, editor, text, "", "", true); err != nil {
+				log.Printf("Failed to add zettel: %v", err)
+			}
+		}
+		return event
+	})
+}
+
 func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
 	row := 0
 	for i := 0; i < len(zettels); i++ {
@@ -119,9 +142,7 @@ func (sui *SearchUI) performSearch(query string) {
 	if query == "" {
 		return
 	}
-	start := `[red]`
-	end := `[white]`
-	zettels, err := sui.storage.SearchZettels(query, start, end)
+	zettels, err := sui.storage.SearchZettels(query, `[red]`, `[white]`)
 	if err != nil {
 		zettels = []storage.ResultZettel{storage.ResultZettel{TitleSnippet: "Incorrect syntax"}}
 	}
@@ -195,7 +216,6 @@ func (sui *SearchUI) listInput(zetPath, editor string) {
 				default:
 					log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel.")
 				}
-
 				return nil
 			case 'q': // quit app
 				sui.app.Stop()
@@ -207,7 +227,6 @@ func (sui *SearchUI) listInput(zetPath, editor string) {
 				}
 			}
 		}
-
 		return event
 	})
 }
