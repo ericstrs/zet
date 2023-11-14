@@ -58,9 +58,13 @@ type Link struct {
 	ToZettelID   int    `db:"to_zettel_id"`   // zettel id where link points to
 }
 
-// AllZettels returns all existing zettel files.
-func (s *Storage) AllZettels() ([]Zettel, error) {
-	const query = `SELECT * FROM zettel;`
+// AllZettels returns all existing zettel files with optional sorting.
+// Optional argument should be a valid SQL ORDER BY clause, e.g., "mtime DESC".
+func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
+	query := `SELECT * FROM zettel`
+	if sort != "" {
+		query = fmt.Sprintf("%s ORDER BY %s", query, sort)
+	}
 	zettels := []Zettel{}
 	if err := s.db.Select(&zettels, query); err != nil {
 		return nil, fmt.Errorf("Error getting zettels records: %v", err)
@@ -209,7 +213,7 @@ func (s *Storage) zettelsMap() (map[string]map[string]Zettel, error) {
 	var zm = make(map[string]map[string]Zettel)
 	zettels := []Zettel{}
 
-	zettels, err := s.AllZettels()
+	zettels, err := s.AllZettels("")
 	if err != nil {
 		return zm, fmt.Errorf("Failed to get all zettels: %v", err)
 	}
