@@ -61,7 +61,19 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 		return false
 	})
 
-	zettels, _ := sui.storage.AllZettels(`dir_name DESC`)
+	t := "Loading all zettels in the background. Begin typing to search, or wait to browse."
+	zettels := []storage.Zettel{storage.Zettel{Title: t}}
+	go func() {
+		zettels, _ = sui.storage.AllZettels(`dir_name DESC`)
+		sui.displayAll(zettels)
+		sui.app.QueueUpdateDraw(func() {
+			text := sui.inputField.GetText()
+			if text == "" {
+				sui.displayAll(zettels)
+			}
+		})
+	}()
+
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30).
 		SetChangedFunc(func(text string) {
