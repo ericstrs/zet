@@ -174,10 +174,12 @@ func UpdateDB(zetPath string) (*Storage, error) {
 		return nil, fmt.Errorf("Failed to initialize database: %v.\n", err)
 	}
 	db := s.db
+
 	zm, err := s.zettelsMap()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get zettels: %v.\n", err)
 	}
+
 	tx, err := db.Beginx()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create transaction: %v\n", err)
@@ -185,6 +187,7 @@ func UpdateDB(zetPath string) (*Storage, error) {
 	if err := processZettels(tx, zetPath, zm); err != nil {
 		return nil, fmt.Errorf("Failed to process zettels: %v.\n", err)
 	}
+
 	return s, tx.Commit()
 }
 
@@ -391,7 +394,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		z := Zettel{}
 		// Filter sub-directories and out any files that are not markdown.
 		z.Name = file.Name()
-		if file.IsDir() || !strings.HasSuffix(z.Name, ".md") {
+		if !strings.HasSuffix(z.Name, ".md") || file.IsDir() {
 			continue
 		}
 		z.DirName = dirName
@@ -403,17 +406,16 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		modTime := info.ModTime().Truncate(time.Second)
 		z.Mtime = modTime.Format(time.RFC3339)
 
-		fp := filepath.Join(dirPath, z.Name)
-		contentBytes, err := os.ReadFile(fp)
-		if err != nil {
-			return err
-		}
-
-		content := string(contentBytes)
-		splitZettel(tx, &z, content)
-
 		f, exists := existingFiles[z.Name]
 		if !exists {
+			fp := filepath.Join(dirPath, z.Name)
+			contentBytes, err := os.ReadFile(fp)
+			if err != nil {
+				return err
+			}
+			content := string(contentBytes)
+			splitZettel(tx, &z, content)
+
 			if err := insertFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to insert new file: %v", err)
 			}
@@ -429,8 +431,15 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 		// If the file has been modified since last recorded, make the
 		// database update operation.
 		if modTime.After(ft) {
-			err := updateFile(tx, z)
+			fp := filepath.Join(dirPath, z.Name)
+			contentBytes, err := os.ReadFile(fp)
 			if err != nil {
+				return err
+			}
+			content := string(contentBytes)
+			splitZettel(tx, &z, content)
+
+			if err := updateFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to update file record: %v", err)
 			}
 		}
