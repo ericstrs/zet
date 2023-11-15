@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/iuiq/zet"
@@ -74,14 +75,23 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 		})
 	}()
 
+	var debounceTimer *time.Timer
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30).
 		SetChangedFunc(func(text string) {
-			if text == "" {
-				sui.displayAll(zettels)
-				return
+			if debounceTimer != nil {
+				debounceTimer.Stop()
 			}
-			sui.performSearch(text)
+			debounceTimer = time.AfterFunc(200*time.Millisecond, func() {
+				sui.app.QueueUpdateDraw(func() {
+					latestText := sui.inputField.GetText()
+					if latestText == "" {
+						sui.displayAll(zettels)
+						return
+					}
+					sui.performSearch(latestText)
+				})
+			})
 		}).
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEnter {
