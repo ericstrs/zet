@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,7 +84,8 @@ func commitBulk(zetPath string, files []string) error {
 		fp := filepath.Join(zetPath, pp)
 		t, err := meta.Title(fp)
 		if err != nil {
-			return fmt.Errorf("Failed to retrieve zettel title: %v", err)
+			log.Printf("Failed to retrieve zettel title: %v", err)
+			continue
 		}
 		if err := commit(zetPath, fp, t); err != nil {
 			return err
@@ -120,14 +122,30 @@ func readmeFiles(zpath string) ([]string, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Look for modified files with ' M ' or '?? ' indicating untracked files
-		if strings.HasPrefix(line, " M ") || strings.HasPrefix(line, "?? ") {
+
+		// Look for modified files with ' M '.
+		if strings.HasPrefix(line, ` M `) {
 			// Check if the modified file is a README.md
-			if strings.HasSuffix(line, "README.md") {
+			if strings.HasSuffix(line, `README.md`) {
 				// Extract the partial file path
 				path := strings.TrimSpace(line[3:])
 				files = append(files, path)
 			}
+			continue
+		}
+
+		// Look for '?? ' indicating untracked files and check if untracked
+		// file is a directory that contains a README.md file.
+		if strings.HasPrefix(line, `?? `) {
+			if strings.HasSuffix(line, `/`) {
+				path := strings.TrimSpace(line[3:])
+				readmePath := filepath.Join(path, `README.md`)
+				_, err := os.Stat(readmePath)
+				if err == nil {
+					files = append(files, readmePath)
+				}
+			}
+			continue
 		}
 	}
 	if err := scanner.Err(); err != nil {
