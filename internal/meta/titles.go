@@ -7,63 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/iuiq/zet/internal/config"
 )
 
-var errPathDoesNotExist = errors.New("path does not exist")
-var titleUsage = `NAME
+var ErrPathDoesNotExist = errors.New("path does not exist")
 
-	title - prints title of the zettel file.
-
-USAGE
-
-	zet title          - Prints title for the zettel file in current dir.
-	zet title [isosec] - Prints title for the zettel file in isosec dir.
-	zet title help     - Provides command information.`
-
-// TitleCmd parses and validates user arguments for the title command.
-// If arguments are valid, it calls the desired operation. If not enough
-// arguments, the exit with non-zero status code.
-func TitleCmd(args []string) error {
-	var t string
-	var err error
-	c := new(config.C)
-	if err := c.Init(); err != nil {
-		return fmt.Errorf("Failed to initialize configuration file: %v", err)
-	}
-	n := len(args)
-
-	switch n {
-	case 2: // no args, use pwd as path
-		p, ok, err := InZettel()
-		if err != nil {
-			return fmt.Errorf("Failed to check if user is in a zettel: %v", err)
-		}
-		if !ok {
-			return errors.New("not in a zettel")
-		}
-		t, err = Title(p)
-		if err != nil {
-			return err
-		}
-	case 3: // one arg, use c.ZetDir/arg as path
-		if strings.ToLower(args[2]) == `help` {
-			fmt.Println(titleUsage)
-			return nil
-		}
-		p := filepath.Join(c.ZetDir, args[2])
-		t, err = Title(p)
-		if err != nil {
-			return err
-		}
-	}
-
-	fmt.Println(t)
-	return nil
-}
-
-// Title returns the title for a zettel given a path.
+// Title returns the title for a zettel at the given path.
 //
 // The prefix used to parse out title differs for each unique file type:
 //
@@ -76,9 +24,9 @@ func Title(path string) (string, error) {
 	}
 
 	// Does the file exist?
-	ok, err := isFile(path)
+	ok, err := IsFile(path)
 	if err != nil {
-		if err == errPathDoesNotExist {
+		if err == ErrPathDoesNotExist {
 			return "", err
 		}
 		return "", fmt.Errorf("Failed to ensure file exists: %v", err)
@@ -110,12 +58,12 @@ func Title(path string) (string, error) {
 	return t, nil
 }
 
-// isFile checks to see if a path exists and correspond to a file.
-func isFile(p string) (bool, error) {
+// IsFile checks to see if a path exists and correspond to a file.
+func IsFile(p string) (bool, error) {
 	info, err := os.Stat(p)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, errPathDoesNotExist
+			return false, ErrPathDoesNotExist
 		}
 		return false, err
 	}
