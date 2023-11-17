@@ -21,7 +21,7 @@ USAGE:
 
 // linkFormat is the format for a zettel link. It should take the form
 // `* [dir](../dir/) title`
-var linkFormat = "* [%s](../%s/) %s"
+var linkFormat = "* [%s](../%s) %s"
 
 // LinkCmd parses and validates user arguments for the link command.
 // If arguments are valid, it calls the desired operation.
@@ -36,7 +36,7 @@ func LinkCmd(args []string) error {
 
 	switch n {
 	case 2: // no args, use pwd as path
-		l, err = CurrLink()
+		l, err = CurrLink(c.ZetDir)
 		if err != nil {
 			return err
 		}
@@ -57,10 +57,10 @@ func LinkCmd(args []string) error {
 }
 
 // CurrLink returns the zettel link for the current zettel.
-func CurrLink() (string, error) {
+func CurrLink(zetDir string) (string, error) {
 	var l string
 	// Get path to zettel directory and ensure user is in a zettel.
-	p, ok, err := InZettel()
+	p, ok, err := InZettel(zetDir)
 	if err != nil {
 		return "", fmt.Errorf("Failed to check if user is in a zettel: %v", err)
 	}
@@ -73,6 +73,22 @@ func CurrLink() (string, error) {
 	}
 
 	return l, nil
+}
+
+// InZettel checks if the user is in a zettel. This is done by checking
+// if the current working directory's parent directory path is equal to
+// saved zettel directory path. It returns path to current working
+// directory, whether or not user is in a zettel directory, and an error
+// indicating if something went wrong with retrieving the current
+// working directory.
+func InZettel(zetDir string) (string, bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+	parentDir := filepath.Dir(cwd)
+	isZettel := parentDir == zetDir
+	return cwd, isZettel, nil
 }
 
 // Link returns the zettel link for the zettel at the given path.
@@ -97,24 +113,8 @@ func zettelDir(path string) (string, error) {
 	parentDir := filepath.Dir(path)
 	parentName := filepath.Base(parentDir)
 	if parentName != "zet" {
-		return "", fmt.Errorf("%s does not reside in zet dir", parentName)
+		return "", fmt.Errorf("%s does not reside in the zettelkasten", parentName)
 	}
 	name := filepath.Base(path)
 	return name, nil
-}
-
-// InZettel checks if the user is in a zettel. The current directory and
-// whether or not user is in a zettel is returned.
-func InZettel() (string, bool, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	// Get the path to parent directory of the current working directory.
-	parentDir := filepath.Dir(cwd)
-
-	// Check if the parent directory's path base name is 'zet'
-	isZettel := filepath.Base(parentDir) == "zet"
-	return cwd, isZettel, nil
 }
