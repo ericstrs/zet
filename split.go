@@ -41,13 +41,13 @@ func makeZettels(bodyLines []string) []storage.Zettel {
 	var currZettel storage.Zettel
 	var isInsideZettel bool
 
-	for _, line := range bodyLines {
-		if strings.HasPrefix(line, `## `) {
+	for i, line := range bodyLines {
+		if strings.HasPrefix(line, `## `) || i == len(bodyLines)-1 {
 			if isInsideZettel {
 				zettels = append(zettels, currZettel)
 				currZettel = storage.Zettel{}
 			}
-			currZettel.Title = strings.TrimPrefix(line, "## ")
+			currZettel.Title = strings.TrimPrefix(line, `## `)
 			isInsideZettel = true
 			continue
 		}
