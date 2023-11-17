@@ -11,6 +11,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/iuiq/zet"
+	"github.com/iuiq/zet/internal/meta"
 	"github.com/iuiq/zet/internal/storage"
 	"github.com/rivo/tview"
 )
@@ -37,7 +38,7 @@ type SearchUI struct {
 }
 
 // NewSearchUI creates and initializes a new SearchUI.
-func NewSearchUI(s *storage.Storage, query, zetPath, editor string) *SearchUI {
+func NewSearchUI(s *storage.Storage, query, zetDir, editor string) *SearchUI {
 	sui := &SearchUI{
 		app:         tview.NewApplication(),
 		inputField:  tview.NewInputField(),
@@ -46,13 +47,13 @@ func NewSearchUI(s *storage.Storage, query, zetPath, editor string) *SearchUI {
 		screenWidth: 50,
 	}
 
-	sui.setupUI(query, zetPath, editor)
+	sui.setupUI(query, zetDir, editor)
 
 	return sui
 }
 
 // setupUI configures the UI elements.
-func (sui *SearchUI) setupUI(query, zetPath, editor string) {
+func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 	sui.globalInput()
 
 	// Update screen width before drawing. This won't affect the current
@@ -82,31 +83,39 @@ func (sui *SearchUI) setupUI(query, zetPath, editor string) {
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
-			debounceTimer = time.AfterFunc(200*time.Millisecond, func() {
-				sui.app.QueueUpdateDraw(func() {
+			debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+				go func() {
+					startTime := time.Now()
 					latestText := sui.inputField.GetText()
 					if latestText == "" {
-						sui.displayAll(zettels)
+						sui.app.QueueUpdateDraw(func() {
+							sui.displayAll(zettels)
+						})
 						return
 					}
-					sui.performSearch(latestText)
-				})
+					zettels := sui.performSearch(latestText)
+					duration := time.Since(startTime)
+					_ = duration
+					fmt.Println(" ", duration)
+					sui.app.QueueUpdateDraw(func() {
+						sui.updateList(zettels)
+					})
+				}()
+
 			})
 		}).
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEnter {
-				text := sui.inputField.GetText()
-				sui.performSearch(text)
 				sui.list.SetSelectable(true, false)
 				sui.app.SetFocus(sui.list)
 			}
 		})
-	sui.ipInput(zetPath, editor)
+	sui.ipInput(zetDir, editor)
 
 	sui.list.SetBorder(true)
 	style := tcell.StyleDefault.Background(tcell.Color107).Foreground(tcell.ColorBlack)
 	sui.list.SetSelectedStyle(style)
-	sui.listInput(zetPath, editor)
+	sui.listInput(zetDir, editor)
 	switch query {
 	case "":
 		sui.displayAll(zettels)
@@ -135,13 +144,19 @@ func (sui *SearchUI) globalInput() {
 }
 
 // ipInput handles input capture for the inputField.
-func (sui *SearchUI) ipInput(zetPath, editor string) {
+func (sui *SearchUI) ipInput(zetDir, editor string) {
 	sui.inputField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// If ctrl+enter pressed, create and open zettel.
 		if event.Modifiers() == 2 && event.Rune() == 10 {
 			text := sui.inputField.GetText()
 			sui.app.Stop()
-			if err := zet.Add(zetPath, editor, text, "", "", true); err != nil {
+			// If current link cannot be found, skip auto-linking
+			currLink, err := meta.CurrLink(zetDir)
+			if err != nil {
+				currLink = ""
+			}
+
+			if err := zet.Add(zetDir, editor, text, "", "", currLink, true); err != nil {
 				log.Printf("Failed to add zettel: %v", err)
 			}
 		}
@@ -152,26 +167,26 @@ func (sui *SearchUI) ipInput(zetPath, editor string) {
 func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
 	row := 0
 	for i := 0; i < len(zettels); i++ {
-		z := &zettels[i]
+		z := zettels[i]
 		// Add zettel dir and title
 		s := `[yellow]` + z.DirName + `[white]` + ` ` + z.Title
 		sui.list.SetCell(row, 0, tview.NewTableCell(s).
-			SetReference(z))
+			SetReference(&z))
 		row++
 	}
 	sui.list.ScrollToBeginning()
 }
 
 // performSearch gets result zettels to update the results list.
-func (sui *SearchUI) performSearch(query string) {
+func (sui *SearchUI) performSearch(query string) []storage.ResultZettel {
 	if query == "" {
-		return
+		return []storage.ResultZettel{}
 	}
 	zettels, err := sui.storage.SearchZettels(query, `[red]`, `[white]`)
 	if err != nil {
 		zettels = []storage.ResultZettel{storage.ResultZettel{TitleSnippet: "Incorrect syntax"}}
 	}
-	sui.updateList(zettels)
+	return zettels
 }
 
 // updateList updates the results list with a given slice of zettels.
@@ -216,7 +231,7 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 }
 
 // listInput handles input capture for the list.
-func (sui *SearchUI) listInput(zetPath, editor string) {
+func (sui *SearchUI) listInput(zetDir, editor string) {
 	sui.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 
@@ -235,17 +250,17 @@ func (sui *SearchUI) listInput(zetPath, editor string) {
 				cell := sui.list.GetCell(row, col)
 				switch z := cell.GetReference().(type) {
 				case *storage.ResultZettel:
-					fp := filepath.Join(zetPath, z.DirName)
+					fp := filepath.Join(zetDir, z.DirName)
 					fp = filepath.Join(fp, z.Name)
 					sui.app.Stop()
-					if err := runCmd(zetPath, editor, fp); err != nil {
+					if err := runCmd(zetDir, editor, fp); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				case *storage.Zettel:
-					fp := filepath.Join(zetPath, z.DirName)
+					fp := filepath.Join(zetDir, z.DirName)
 					fp = filepath.Join(fp, z.Name)
 					sui.app.Stop()
-					if err := runCmd(zetPath, editor, fp); err != nil {
+					if err := runCmd(zetDir, editor, fp); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				default:
