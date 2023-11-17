@@ -188,7 +188,13 @@ func ContentCmd(args []string) error {
 			return err
 		}
 	case `links`:
+		if err := linksCmd(args[2:], c.ZetDir); err != nil {
+			return err
+		}
 	case `tags`:
+		if err := tagsCmd(args[2:], c.ZetDir); err != nil {
+			return err
+		}
 	case `help`:
 		fmt.Println(contentUsage)
 	}
@@ -220,7 +226,9 @@ func titleCmd(args []string, zetDir string) error {
 			return err
 		}
 	}
-	fmt.Println(t)
+	if t != "" {
+		fmt.Println(t)
+	}
 	return nil
 }
 
@@ -248,6 +256,68 @@ func bodyCmd(args []string, zetDir string) error {
 			return err
 		}
 	}
-	fmt.Println(b)
+	if b != "" {
+		fmt.Println(b)
+	}
+	return nil
+}
+
+func linksCmd(args []string, zetDir string) error {
+	var l string
+	n := len(args)
+	switch n {
+	case 1:
+		p, ok, err := meta.InZettel(zetDir)
+		if err != nil {
+			return fmt.Errorf("Error checking if user is in a zettel directory: %v", err)
+		}
+		if !ok {
+			return errors.New("not in a zettel")
+		}
+		l, err = meta.Links(p)
+		if err != nil {
+			return err
+		}
+	default:
+		var err error
+		p := filepath.Join(zetDir, args[1])
+		l, err = meta.Links(p)
+		if err != nil {
+			return err
+		}
+	}
+	if l != "" {
+		fmt.Println(l)
+	}
+	return nil
+}
+
+func tagsCmd(args []string, zetDir string) error {
+	var t string
+	n := len(args)
+	switch n {
+	case 1:
+		p, ok, err := meta.InZettel(zetDir)
+		if err != nil {
+			return fmt.Errorf("Error checking if user is in a zettel directory: %v", err)
+		}
+		if !ok {
+			return errors.New("not in a zettel")
+		}
+		t, err = meta.Tags(p)
+		if err != nil {
+			return err
+		}
+	default:
+		var err error
+		p := filepath.Join(zetDir, args[1])
+		t, err = meta.Tags(p)
+		if err != nil {
+			return err
+		}
+	}
+	if t != "" {
+		fmt.Println(t)
+	}
 	return nil
 }
