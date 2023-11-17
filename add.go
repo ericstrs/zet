@@ -87,13 +87,20 @@ func AddCmd(args []string) error {
 		stdin = strings.TrimSuffix(stdin, "\n")
 	}
 
+	// If current link cannot be found, skip auto-linking
+	currLink, err := meta.CurrLink(c.ZetDir)
+	if err != nil {
+		currLink = ""
+	}
+
 	var openZettel bool
 	// If no title and no body and no stdin, then open newly created zettel.
 	if title == "" && body == "" && stdin == "" {
 		openZettel = true
 	}
+
 	// Otherwise, just create the zettel without opening it.
-	if err := Add(c.ZetDir, c.Editor, title, body, stdin, openZettel); err != nil {
+	if err := Add(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
 		return err
 	}
 
@@ -121,10 +128,9 @@ func AddCmd(args []string) error {
 // Stdin is always appended after any argument data. Providing non-empty
 // Stdin alongside `zet add` disables the interactive feature.
 //
-// Auto-linking is enabled by default. If calling the add command from
-// an existing zettel directory, the newly created zettel will have link
-// to existing zettel.
-func Add(path, editor, title, body, stdin string, open bool) error {
+// If link argument is not empty, it will be included in the newly
+// created zettel.
+func Add(path, editor, title, body, stdin, link string, open bool) error {
 	// Create new directory using the current isosec
 	is := Isosec()
 	zpath := filepath.Join(path, is)
@@ -149,16 +155,9 @@ func Add(path, editor, title, body, stdin string, open bool) error {
 	if stdin != "" {
 		fullText += "\n\n" + stdin
 	}
-
-	autoLinkEnabled := true
-	if autoLinkEnabled {
-		// If current link cannot be found, skip auto-linking
-		currLink, err := meta.CurrLink()
-		if err == nil {
-			fullText += "\n\nSee:\n\n" + currLink
-		}
+	if link != "" {
+		fullText += "\n\nSee:\n\n" + link
 	}
-
 	fullText += "\n"
 
 	// Write the zettel content
