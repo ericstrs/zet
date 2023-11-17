@@ -8,14 +8,15 @@ Usage:
 
 Commands:
 
-	add    - Adds a new zettel with the given title and content.
-	search - Searches for zettels given a query string.
-	merge  - Merges linked notes to form a single note.
-	list   - Lists all existing zettels.
-	title  - Prints the title of a zettel file.
-	link   - Prints the link of a zettel.
-	isosec - Prints the current ISO date to the millisecond.
-	commit - Performs a git commit using zettel's title.
+	add     - Adds a new zettel with the given title and content.
+	search  - Searches for zettels given a query string.
+	split   - Splits up a given zettel into sub-zettels.
+	content - Prints different sections of zettel content.
+	merge   - Merges linked notes to form a single note.
+	list    - Lists all existing zettels.
+	link    - Prints the link of a zettel.
+	isosec  - Prints the current ISO date to the millisecond.
+	commit  - Performs a git commit using zettel's title.
 
 Appending "help" after any command will print command info.
 */
@@ -29,6 +30,7 @@ import (
 
 	z "github.com/iuiq/zet"
 	"github.com/iuiq/zet/internal/meta"
+	"github.com/iuiq/zet/internal/ui"
 )
 
 const usage = `USAGE
@@ -37,14 +39,15 @@ const usage = `USAGE
 
 COMMANDS
 
-	add    - Adds a new zettel with the given title and content.
-	search - Searches for zettels given a query string.
-	merge  - Merges linked notes to form a single note.
-	list   - Lists all existing zettels.
-	title  - Prints the title of a zettel file.
-	link   - Prints the link of a zettel.
-	isosec - Prints the current ISO date to the millisecond.
-	commit - Performs a git commit using zettel's title.
+	add     - Adds a new zettel with the given title and content.
+	search  - Searches for zettels given a query string.
+	split   - Splits up a given zettel into sub-zettels.
+	content - Prints different sections of zettel content.
+	merge   - Merges linked notes to form a single note.
+	list    - Lists all existing zettels.
+	link    - Prints the link of a zettel.
+	isosec  - Prints the current ISO date to the millisecond.
+	commit  - Performs a git commit using zettel's title.
 
 Appending "help" after any command will print more command info.
 `
@@ -68,10 +71,6 @@ func Run() error {
 		if err := z.AddCmd(args); err != nil {
 			return fmt.Errorf("Failed to add a zettel: %v", err)
 		}
-	case `title`: // get zettel title
-		if err := meta.TitleCmd(args); err != nil {
-			return fmt.Errorf("Failed to retrieve zettel title: %v", err)
-		}
 	case `link`: // get zettel link
 		if err := meta.LinkCmd(args); err != nil {
 			return fmt.Errorf("Failed to retrieve zettel link: %v", err)
@@ -80,12 +79,26 @@ func Run() error {
 		if err := z.CommitCmd(args); err != nil {
 			return err
 		}
-	case `list`:
+	case `list`, `ls`:
 		if err := meta.ListCmd(args); err != nil {
 			return err
 		}
+	case `search`:
+		if err := ui.SearchCmd(args); err != nil {
+			return err
+		}
+	case `split`:
+		if err := ui.SplitCmd(args); err != nil {
+			return fmt.Errorf("Error splitting zettel: %v", err)
+		}
+	case `content`:
+		if err := ui.ContentCmd(args); err != nil {
+			return fmt.Errorf("Error getting content from zettel: %v", err)
+		}
 	case `isosec`:
 		z.IsosecCmd(args)
+	case `help`:
+		fmt.Printf(usage)
 	default:
 		return fmt.Errorf("Invalid argument.\n%s", usage)
 	}
