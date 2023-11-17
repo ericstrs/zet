@@ -103,30 +103,49 @@ func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
 func (s *Storage) SearchZettels(term, before, after string) ([]ResultZettel, error) {
 	term = preprocessInput(term)
 	var results []ResultZettel
+
 	query := `
-			SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name,
-				COALESCE(snippet(zettel_fts, 0, '` + before + `', '` + after + `', '...', 15), '') AS title_snippet,
-				COALESCE(snippet(zettel_fts, 1, '` + before + `', '` + after + `', '...', 15), '') AS body_snippet,
-      	COALESCE(snippet(zettel_fts, 2, '` + before + `', '` + after + `', '...', 15), '') AS tags_snippet
-			FROM zettel_fts
-			JOIN zettel z ON zettel_fts.rowid = z.id
-			WHERE zettel_fts MATCH LOWER($1)
-			ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
-	`
+					SELECT z.id, z.name, z.title, z.body, z.mtime, z.dir_name,
+						COALESCE(highlight(zettel_fts, 0, '` + before + `', '` + after + `'), '') AS title_snippet,
+						COALESCE(highlight(zettel_fts, 1, '` + before + `', '` + after + `'), '') AS body_snippet,
+		      	COALESCE(highlight(zettel_fts, 2, '` + before + `', '` + after + `'), '') AS tags_snippet
+					FROM zettel_fts
+					JOIN zettel z ON zettel_fts.rowid = z.id
+					WHERE zettel_fts MATCH LOWER($1)
+					ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
+			`
 
 	if err := s.db.Select(&results, query, strings.ToLower(term)); err != nil {
 		return nil, err
 	}
 
-	for _, z := range results {
+	for i := range results {
+		z := &results[i]
 		if err := zettelTags(s.db, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
 		if err := zettelLinks(s.db, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
+		z.BodySnippet = createSnippets(z.BodySnippet, before, after)
 	}
 	return results, nil
+}
+
+// createSnippets returns all lines that contain a match as a single
+// string.
+func createSnippets(body, before, after string) string {
+	var builder strings.Builder
+	lines := strings.Split(body, "\n")
+
+	for i, line := range lines {
+		if strings.Contains(line, before) && strings.Contains(line, after) {
+			snippet := fmt.Sprintf("%d: %s\n", i+2, line)
+			builder.WriteString(snippet)
+		}
+	}
+
+	return builder.String()
 }
 
 // preprocessInput processes user input for fts5 search.
@@ -293,7 +312,7 @@ func processZettels(tx *sqlx.Tx, zetPath string, zm map[string]map[string]Zettel
 // If the given directory has zero files or does not contain any
 // README.md files, then this function does nothing.
 func addZettel(tx *sqlx.Tx, dirPath string, files []os.DirEntry) error {
-	if len(files) == 0 || !containsMD(files) {
+	if len(files) == 0 || !ContainsMD(files) {
 		return nil
 	}
 
@@ -336,8 +355,8 @@ func addZettel(tx *sqlx.Tx, dirPath string, files []os.DirEntry) error {
 	return nil
 }
 
-// containsMD checks if a slice of files contains a README.md file.
-func containsMD(files []os.DirEntry) bool {
+// ContainsMD checks if a slice of files contains a README.md file.
+func ContainsMD(files []os.DirEntry) bool {
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), ".md") {
 			return true
@@ -455,7 +474,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 	return nil
 }
 
-// splitZettel breaks a zettel's contents and assigns it's parts to
+// SplitZettel breaks a zettel's contents and assigns it's parts to
 // associated fields: title, body, links, and tags.
 func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 	var bodyLines []string
