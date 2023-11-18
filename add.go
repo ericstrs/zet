@@ -107,8 +107,24 @@ func AddCmd(args []string) error {
 	return nil
 }
 
-// Add adds a zettel (note). This consists of creating a new directory
-// with a unique identifier and then creating a new file. Zettels are
+// CreateAdd creates a new directory with a unique identifier and then
+// creates a new file.
+func CreateAdd(path, editor, title, body, stdin, link string, open bool) error {
+	// Create new directory using the current isosec
+	is := Isosec()
+	newDirPath := filepath.Join(path, is)
+	err := dir(newDirPath)
+	if err != nil {
+		return fmt.Errorf("Error creating new zettel directory: %v", err)
+	}
+	err = Add(newDirPath, editor, title, body, stdin, link, open)
+	if err != nil {
+		return fmt.Errorf("Error adding zettel: %v", err)
+	}
+	return nil
+}
+
+// Add adds a zettel (note) to an exiting zettel directory. Zettels are
 // markdown by default. The path to the zet system is used instead of
 // changing the zet directory to support zettel creation from scripts.
 //
@@ -130,16 +146,8 @@ func AddCmd(args []string) error {
 //
 // If link argument is not empty, it will be included in the newly
 // created zettel.
-func Add(path, editor, title, body, stdin, link string, open bool) error {
-	// Create new directory using the current isosec
-	is := Isosec()
-	zpath := filepath.Join(path, is)
-	err := dir(zpath)
-	if err != nil {
-		return fmt.Errorf("Failed create new zettel directory: %v", err)
-	}
-
-	zfpath := filepath.Join(zpath, "README.md")
+func Add(newDirPath, editor, title, body, stdin, link string, open bool) error {
+	zfpath := filepath.Join(newDirPath, "README.md")
 
 	// Create new zettel
 	f, err := file(zfpath)
@@ -150,29 +158,27 @@ func Add(path, editor, title, body, stdin, link string, open bool) error {
 
 	fullText := "# " + title
 	if body != "" {
-		fullText += "\n\n" + body
+		fullText += body
 	}
 	if stdin != "" {
-		fullText += "\n\n" + stdin
+		fullText += stdin
 	}
 	if link != "" {
-		fullText += "\n\nSee:\n\n" + link
+		fullText += "See:\n\n" + link
 	}
 	fullText += "\n"
 
 	// Write the zettel content
 	writer := bufio.NewWriter(f)
-	_, err = writer.WriteString(fullText)
-	if err != nil {
+	if _, err = writer.WriteString(fullText); err != nil {
 		return fmt.Errorf("Failed full text write to new zettel %s: %v", zfpath, err)
 	}
-	err = writer.Flush()
-	if err != nil {
+	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("Failed write buffered data to new zettel %s: %v", zfpath, err)
 	}
 
 	if open {
-		if err := runCmd(zpath, editor, zfpath); err != nil {
+		if err := runCmd(newDirPath, editor, zfpath); err != nil {
 			return fmt.Errorf("Failed to open new zettel: %v", err)
 		}
 	}
