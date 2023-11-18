@@ -3,16 +3,17 @@ package zet
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/iuiq/zet/internal/meta"
 	"github.com/iuiq/zet/internal/storage"
 )
 
 // SplitZettel splits zettel content from stdin into sub-zettels.
-func SplitZettel(zetDir, zettelDir, content string) error {
-	if content == "" {
+func SplitZettel(zetDir, zettelDir, b string) error {
+	if b == "" {
 		return errors.New("zettel content is empty")
 	}
 
@@ -21,15 +22,25 @@ func SplitZettel(zetDir, zettelDir, content string) error {
 		return fmt.Errorf("Error getting current link: %v", err)
 	}
 
-	b := meta.ParseBody(content)
-	zettels := makeZettels(b)
+	zettels := makeZettels(strings.Split(b, "\n"))
+	i := Isosec()
+	iso, err := strconv.Atoi(i)
+	if err != nil {
+		return fmt.Errorf("Error converting isosec string to int: %v", err)
+	}
 
-	for _, z := range zettels {
-		if err := Add(zetDir, "", z.Title, z.Body, "", currLink, false); err != nil {
+	for i, z := range zettels {
+		iso++
+		newDirPath := filepath.Join(zetDir, fmt.Sprintf("%d", iso))
+		if err := dir(newDirPath); err != nil {
+			return fmt.Errorf("Error creating new zettel directory: %v", err)
+		}
+
+		if err := Add(newDirPath, "", z.Title, z.Body, "", currLink, false); err != nil {
 			return fmt.Errorf("Error adding sub-zettels: %v", err)
 		}
-		// Set sleep timer to prevent isosec stomping
-		time.Sleep(1000 * time.Millisecond)
+
+		fmt.Printf("[%d] Added zettel: %q\n", i+1, z.Title)
 	}
 
 	return nil
@@ -52,6 +63,13 @@ func makeZettels(bodyLines []string) []storage.Zettel {
 			continue
 		}
 
+		// Check if the line starts with more than two hash symbols
+		if strings.HasPrefix(line, "###") {
+			// Remove one hash symbol
+			line = "#" + strings.TrimPrefix(line, "##")
+		}
+
+		// If line starts with more than two hash tags, then remove one.
 		currZettel.Body += line + "\n"
 	}
 
