@@ -156,7 +156,7 @@ func (sui *SearchUI) ipInput(zetDir, editor string) {
 				currLink = ""
 			}
 
-			if err := zet.Add(zetDir, editor, text, "", "", currLink, true); err != nil {
+			if err := zet.CreateAdd(zetDir, editor, text, "", "", currLink, true); err != nil {
 				log.Printf("Failed to add zettel: %v", err)
 			}
 		}
