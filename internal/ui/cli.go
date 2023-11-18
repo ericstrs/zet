@@ -80,7 +80,7 @@ func SearchCmd(args []string) error {
 					fmt.Println(removeEmptyLines(z.BodySnippet))
 				}
 				if z.TagsSnippet != "" {
-					hashedTags := "\t\t#" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
+					hashedTags := "    #" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
 					fmt.Println(hashedTags)
 				}
 			}
@@ -121,6 +121,7 @@ func SplitCmd(args []string) error {
 		if stdin == "" {
 			return nil
 		}
+		b := meta.ParseBody(stdin)
 
 		p, ok, err := meta.InZettel(c.ZetDir)
 		if err != nil {
@@ -130,13 +131,22 @@ func SplitCmd(args []string) error {
 			return errors.New("not in a zettel")
 		}
 
-		if err := zet.SplitZettel(c.ZetDir, p, stdin); err != nil {
+		if err := zet.SplitZettel(c.ZetDir, p, strings.Join(b, "\n")); err != nil {
 			return fmt.Errorf("Error splitting zettel content: %v", err)
 		}
-	case 3: // one arg
-		switch strings.ToLower(os.Args[2]) {
-		case `help`:
+	default:
+		if strings.ToLower(os.Args[2]) == `help` {
 			fmt.Printf(splitUsage)
+		}
+		p := filepath.Join(c.ZetDir, args[2])
+
+		b, err := meta.Body(p)
+		if err != nil {
+			return fmt.Errorf("Error parsing out zettel body: %v", err)
+		}
+
+		if err := zet.SplitZettel(c.ZetDir, p, b); err != nil {
+			return fmt.Errorf("Error splitting zettel content: %v", err)
 		}
 	}
 	return nil
