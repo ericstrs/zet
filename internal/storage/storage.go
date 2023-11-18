@@ -481,7 +481,7 @@ func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
 	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
-	tagRegex := regexp.MustCompile(`^ {4,}#[a-zA-Z]+`)
+	tagRegex := regexp.MustCompile(`^ {4,}(#[a-zA-Z]+.*)`)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
@@ -509,8 +509,9 @@ func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 		}
 
 		// Is line the tag line?
-		if tagRegex.MatchString(line) {
-			tagLine := strings.TrimPrefix(line, "\t\t")
+		matches = tagRegex.FindStringSubmatch(line)
+		if len(matches) > 1 {
+			tagLine := matches[1]
 			ts := strings.Split(tagLine, ` `)
 
 			for _, t := range ts {
