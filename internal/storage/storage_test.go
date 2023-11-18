@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -440,20 +441,26 @@ func ExampleAddZettel() {
 	}
 	defer tx.Rollback()
 
-	if err := addZettel(tx, testZetDir); err != nil {
+	files, err := os.ReadDir(testZetDir)
+	if err != nil {
+		fmt.Printf("Error reading sub-directory: %v", err)
+		return
+	}
+
+	if err := addZettel(tx, testZetDir, files); err != nil {
 		fmt.Printf("Failed to add zettel: %v\n", err)
 		return
 	}
 
 	// Validate zettel insertion.
-	files := []Zettel{}
-	err = tx.Select(&files, "SELECT * FROM zettel WHERE dir_name = 20231028013031;")
+	zettels := []Zettel{}
+	err = tx.Select(&zettels, "SELECT * FROM zettel WHERE dir_name = 20231028013031;")
 	if err != nil {
 		fmt.Printf("Failed to select zettel: %v\n", err)
 		return
 	}
 
-	for _, f := range files {
+	for _, f := range zettels {
 		fmt.Printf("./%s/%s id: %d\n", f.DirName, f.Name, f.ID)
 	}
 
@@ -518,7 +525,7 @@ See:
 * [20231028013031](../20231028013031) Another linked Zettel
 * [20240000003031](../20240000003031) Non-existent Zettel
 
-		#tag1 badTag #tag2`
+    #tag1 badTag #tag2`
 
 	z := &Zettel{}
 	splitZettel(tx, z, e)
