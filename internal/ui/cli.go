@@ -49,6 +49,39 @@ USAGE
 	zet content links - Prints links from README.md in current directory or in given directory.
 	zet content tags  - Prints tags from README.md in current directory or in given directory.
 	`
+	mergeUsage = `NAME
+
+	merge - Merges the contents of split zettel's into single body of text.
+
+USAGE
+
+	zet merge [isosec] - Merges contents of split linked zettel's at given isosec directory or using stdin.
+
+DESCRIPTION
+
+	The non-linear nature of a Zettelkasten is one of its main strengths,
+	but sometimes a linear representation is more suitable.
+
+	Printing to standard output rather than writing to a file creates
+	flexibility is how you can use this command. It allows the user to
+	view the merged content in various ways (viewing, redirecting to a
+	file, further processing with other tools).
+
+	Example usage:
+
+	Print merged content to pager:
+
+	` + "`" + `$ zet merge 20231118194243 | less` + "`" + `
+
+	Piped merged content to file:
+
+	` + "`" + `$ zet merge 20231118194243 > output.md` + "`" + `
+
+	The file output.md can then be used to retrieve the next level of
+	sub-zettels:
+
+	` + "`" + `$zet merge < output.md > output.md` + "`" + `
+`
 )
 
 func SearchCmd(args []string) error {
@@ -113,7 +146,7 @@ func SplitCmd(args []string) error {
 	n := len(args)
 
 	switch n {
-	case 2: // no args
+	case 2:
 		stdin, err := getStdin()
 		if err != nil {
 			return fmt.Errorf("Error getting standard input: %v", err)
@@ -328,6 +361,103 @@ func tagsCmd(args []string, zetDir string) error {
 	}
 	if t != "" {
 		fmt.Println(t)
+	}
+	return nil
+}
+
+// MergeCmd merges the contents of split zettel's into single body of text.
+//
+// The non-linear nature of a Zettelkasten is one of its main strengths,
+// but sometimes a linear representation is more suitable.
+//
+// Printing to standard output rather than writing to a file creates
+// flexibility is how you can use this command. It allows the user to
+// view the merged content in various ways (viewing, redirecting to a
+// file, further processing with other tools).
+//
+// Example usage:
+//
+// Print merged content to pager:
+//
+// `$ zet merge 20231118194243 | less`
+//
+// Piped merged content to file:
+//
+// `$ zet merge 20231118194243 > output.md`
+//
+// The file output.md can then be used to retrieve the next level of
+// sub-zettels:
+//
+// `$zet merge < output.md > output.md`
+func MergeCmd(args []string) error {
+	var mc string
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	switch n {
+	case 2: // Root zettel content comes from stdin
+		s, err := storage.UpdateDB(c.ZetDir)
+		if err != nil {
+			return fmt.Errorf("Error syncing database and flat files: %v", err)
+		}
+		defer s.Close()
+
+		stdin, err := getStdin()
+		if err != nil {
+			return fmt.Errorf("Error getting standard input: %v", err)
+		}
+		if stdin == "" {
+			return nil
+		}
+
+		mc, err = s.Merge(stdin)
+		if err != nil {
+			return fmt.Errorf("Error splitting zettel content: %v", err)
+		}
+	default:
+		if strings.ToLower(os.Args[2]) == `help` {
+			fmt.Printf(mergeUsage)
+			break
+		}
+		s, err := storage.UpdateDB(c.ZetDir)
+		if err != nil {
+			return fmt.Errorf("Error syncing database and flat files: %v", err)
+		}
+		defer s.Close()
+
+		p := filepath.Join(c.ZetDir, args[2])
+
+		// This essentially locks support to just readme files.
+		if !strings.HasSuffix(p, `README.md`) {
+			p = filepath.Join(p, `README.md`)
+		}
+		// Does the file exist?
+		ok, err := meta.IsFile(p)
+		if err != nil {
+			if err == meta.ErrPathDoesNotExist {
+				return err
+			}
+			return fmt.Errorf("Failed to ensure file exists: %v", err)
+		}
+		if !ok {
+			return errors.New("path corresponds to a directory")
+		}
+		cb, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("Error reading zettel content: %v", err)
+		}
+		c := string(cb)
+
+		mc, err = s.Merge(c)
+		if err != nil {
+			return fmt.Errorf("Error merging linked zettel content: %v", err)
+		}
+	}
+	if mc != "" {
+		fmt.Println(mc)
 	}
 	return nil
 }
