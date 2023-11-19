@@ -97,6 +97,23 @@ func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
 	return zettels, nil
 }
 
+// GetZettel returns a zettel from the database for a given zettel id.
+func GetZettel(db *sqlx.DB, id int) (Zettel, error) {
+	z := Zettel{}
+	query := `SELECT * FROM zettel WHERE id = $1`
+	if err := db.Get(&z, query, id); err != nil {
+		return z, fmt.Errorf("Error getting zettels records: %v", err)
+	}
+	// Fetch tags and links for this zettel
+	if err := zettelTags(db, &z); err != nil {
+		return z, fmt.Errorf("Error getting tags: %v", err)
+	}
+	if err := zettelLinks(db, &z); err != nil {
+		return z, fmt.Errorf("Error getting links: %v", err)
+	}
+	return z, nil
+}
+
 // SearchZettels searches the zettelkasten for zettels matching the
 // query. The before and after arguments are used for wrapping any
 // matching text. It returns a slice of Zettels.
@@ -345,7 +362,7 @@ func addZettel(tx *sqlx.Tx, dirPath string, files []os.DirEntry) error {
 			return err
 		}
 		content := string(contentBytes)
-		splitZettel(tx, &z, content)
+		SplitZettel(tx, &z, content)
 
 		if err := insertFile(tx, z); err != nil {
 			return fmt.Errorf("Failed to insert new file: %v", err)
@@ -433,7 +450,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 				return err
 			}
 			content := string(contentBytes)
-			splitZettel(tx, &z, content)
+			SplitZettel(tx, &z, content)
 
 			if err := insertFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to insert new file: %v", err)
@@ -456,7 +473,7 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 				return err
 			}
 			content := string(contentBytes)
-			splitZettel(tx, &z, content)
+			SplitZettel(tx, &z, content)
 
 			if err := updateFile(tx, z); err != nil {
 				return fmt.Errorf("Failed to update file record: %v", err)
@@ -476,11 +493,11 @@ func processFiles(tx *sqlx.Tx, dirPath string, zm map[string]map[string]Zettel) 
 
 // SplitZettel breaks a zettel's contents and assigns it's parts to
 // associated fields: title, body, links, and tags.
-func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
+func SplitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 	var bodyLines []string
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
-	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
+	linkRegex := regexp.MustCompile(`^.*(\[(.+)\]\(\.\./(.*?)/?\) (.+))`)
 	tagRegex := regexp.MustCompile(`^ {4,}(#[a-zA-Z]+.*)`)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -496,14 +513,14 @@ func splitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 
 		// Is line a markdown link?
 		matches := linkRegex.FindStringSubmatch(line)
-		if len(matches) > 0 {
-			iso := matches[1]
+		if len(matches) > 1 {
+			iso := matches[2]
 			id, err := zettelIdDir(tx, iso)
 			if err != nil {
 				// If referenced zettel id couldn't be found, skip link
 				continue
 			}
-			l := Link{Content: matches[0], ToZettelID: id}
+			l := Link{Content: matches[1], ToZettelID: id}
 			z.Links = append(z.Links, l)
 			continue
 		}
@@ -551,7 +568,7 @@ func insertFile(tx *sqlx.Tx, z Zettel) error {
 		RETURNING id;`
 		insertLinksSQL = `
 		INSERT INTO link (content, from_zettel_id, to_zettel_id)
-		VALUES ($1, $2, $3);`
+		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`
 	)
 	var id int
 	err := tx.QueryRow(insertZettelSQL, z.Name, z.Title, z.Body, z.Mtime, z.DirName).Scan(&id)
@@ -890,4 +907,87 @@ func isoToTime(t string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return mt, nil
+}
+
+// Merge fetches and merges the content of each linked zettel, creating
+// a single body of text.
+func (s *Storage) Merge(rootContent string) (string, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return "", fmt.Errorf("Failed to create transaction: %v\n", err)
+	}
+	rz := Zettel{}
+
+	var bodyLines []string
+	isBody := false
+	// Match lines that contain a link. E.g., `* [dir][../dir] title`
+	linkRegex := regexp.MustCompile(`^.*(\[(.+)\]\(\.\./(.*?)/?\) (.+))`)
+
+	scanner := bufio.NewScanner(strings.NewReader(rootContent))
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Is line the title?
+		if rz.Title == "" && strings.HasPrefix(line, `# `) {
+			rz.Title = strings.TrimPrefix(line, `# `)
+			isBody = true
+			continue
+		}
+
+		// Is line a markdown link?
+		matches := linkRegex.FindStringSubmatch(line)
+		if len(matches) > 1 {
+			iso := matches[2]
+
+			// Ensure zettel directory in the link is unique.
+			id, err := zettelIdDir(tx, iso)
+			if err != nil {
+				// If referenced zettel id couldn't be found, skip link
+				continue
+			}
+
+			// Get zettel that the link points to.
+			z, err := GetZettel(s.db, id)
+			if err != nil {
+				return "", fmt.Errorf("Error retrieving sub-zettel: %v", err)
+			}
+
+			// Build the sub-zettel content and append to merged zettel body
+			// lines. This essentially replaces an existing zettel link with the
+			// zettels contents its linking to.
+			subZettel := "## " + z.Title + "\n"
+			if z.Body != "" {
+				subZettel += z.Body + "\n"
+			}
+			for _, l := range z.Links {
+				subZettel += "* " + l.Content + "\n"
+			}
+			if len(z.Tags) > 0 {
+				var tags string
+				for _, t := range z.Tags {
+					tags += fmt.Sprintf("#%s ", t.Name)
+				}
+				subZettel += "    " + tags + "\n"
+			}
+			bodyLines = append(bodyLines, subZettel)
+
+			continue
+		}
+
+		// Everything else is considered as body.
+		if isBody {
+			bodyLines = append(bodyLines, line)
+		}
+	}
+
+	// Build merged content string.
+	mergedContent := ""
+	if rz.Title != "" {
+		mergedContent += "# " + rz.Title + "\n"
+	}
+	if len(bodyLines) != 0 {
+		mergedContent += strings.Join(bodyLines, "\n") + "\n"
+	}
+
+	return mergedContent, nil
 }
