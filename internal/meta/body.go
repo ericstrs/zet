@@ -46,7 +46,7 @@ func ParseBody(content string) []string {
 	var title string
 	isBody := false
 	// Match lines that contain a link. E.g., `* [dir][../dir] title`
-	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
+	linkRegex := regexp.MustCompile(`^.*(\[(.+)\]\(\.\./(.*?)/?\) (.+))`)
 	tagRegex := regexp.MustCompile(`^ {4,}#[a-zA-Z]+`)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -62,7 +62,7 @@ func ParseBody(content string) []string {
 
 		// Is line a markdown link?
 		matches := linkRegex.FindStringSubmatch(line)
-		if len(matches) > 0 {
+		if len(matches) > 1 {
 			continue
 		}
 
