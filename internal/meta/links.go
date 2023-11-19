@@ -157,13 +157,12 @@ func Links(path string) (string, error) {
 // "[dir](../dir) title".
 func ParseLinks(content string) []string {
 	var linkLines []string
-	// Match lines that contain a link. E.g., `* [dir][../dir] title`
-	linkRegex := regexp.MustCompile(`\[(.+)\]\(\.\./(.*?)/?\) (.+)`)
+	linkRegex := regexp.MustCompile(`^.*(\[(.+)\]\(\.\./(.*?)/?\) (.+))`)
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 		matches := linkRegex.FindStringSubmatch(line)
-		if len(matches) > 0 {
+		if len(matches) > 1 {
 			linkLines = append(linkLines, line)
 			continue
 		}
