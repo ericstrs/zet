@@ -219,7 +219,7 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 		}
 		// Add tags snippet
 		if z.TagsSnippet != "" {
-			hashedTags := "\t\t#" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
+			hashedTags := "    #" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
 			list.SetCell(row, 0, tview.NewTableCell(hashedTags).
 				SetSelectable(false))
 			row++
