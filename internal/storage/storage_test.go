@@ -517,21 +517,22 @@ func ExampleSplitZettel() {
 	const e = `# Example Title
 
 This is some body text.
-It can span multiple lines.
+It can span multiple lines[^f].
 
 See:
 
 * [20231028013031](../20231028013031) Some linked Zettel
-* [20231028013031](../20231028013031) Another linked Zettel
 * [20240000003031](../20240000003031) Non-existent Zettel
+
+[^f]: [20231028013031](../20231028013031) Another linked Zettel
 
     #tag1 badTag #tag2`
 
 	z := &Zettel{}
-	splitZettel(tx, z, e)
+	SplitZettel(tx, z, e)
 	fmt.Println("Title:", z.Title)
 	fmt.Println("Body:")
-	fmt.Printf(z.Body)
+	fmt.Printf("%q\n", z.Body)
 	fmt.Println("Links:")
 	for _, l := range z.Links {
 		fmt.Printf("\t%s\n", l.Content)
@@ -544,12 +545,7 @@ See:
 	// Output:
 	// Title: Example Title
 	// Body:
-	//
-	// This is some body text.
-	// It can span multiple lines.
-	//
-	// See:
-	//
+	// "\nThis is some body text.\nIt can span multiple lines[^f].\n\nSee:\n\n\n"
 	// Links:
 	// 	[20231028013031](../20231028013031) Some linked Zettel
 	// 	[20231028013031](../20231028013031) Another linked Zettel
@@ -582,13 +578,13 @@ func ExampleSearchZettels() {
 			fmt.Printf("%q\n", z.BodySnippet)
 		}
 		if z.TagsSnippet != "" {
-			hashedTags := "\t\t#" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
+			hashedTags := "    #" + strings.ReplaceAll(z.TagsSnippet, " ", " #")
 			fmt.Println(hashedTags)
 		}
 	}
 
 	// Output:
 	// 20231028013010 [red]Zettel[white] 2
-	// "\n\n        This is the [red]zettel[white] body"
-	//		#[red]productivity[white] #pkms
+	// "4:         This is the [red]zettel[white] body\n"
+	//     #[red]productivity[white] #pkms
 }
