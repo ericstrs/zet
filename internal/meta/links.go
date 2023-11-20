@@ -97,30 +97,15 @@ func InZettel(zetDir string) (string, bool, error) {
 
 // Link returns the zettel link for the zettel at the given path.
 func Link(path string) (string, error) {
-	d, err := zettelDir(path)
-	if err != nil {
-		return "", fmt.Errorf("Failed to retrieve zettel dir: %v", err)
-	}
 	t, err := Title(path)
 	if err != nil {
 		return "", fmt.Errorf("Failed to retrieve zettel title: %v", err)
 	}
 
+	d := filepath.Base(path)
+
 	l := fmt.Sprintf(linkFormat, d, d, t)
 	return l, nil
-}
-
-// zettelDir returns the zettel directory name given the path. An empty
-// string and an error is returned if the parent directory is not in the
-// zet directory.
-func zettelDir(path string) (string, error) {
-	parentDir := filepath.Dir(path)
-	parentName := filepath.Base(parentDir)
-	if parentName != "zet" {
-		return "", fmt.Errorf("%s does not reside in the zettelkasten", parentName)
-	}
-	name := filepath.Base(path)
-	return name, nil
 }
 
 // Links returns links from a zettel at the given path.
