@@ -29,7 +29,7 @@ func SplitZettel(zetDir, zettelDir, b string) error {
 		return fmt.Errorf("Error converting isosec string to int: %v", err)
 	}
 
-	for i, z := range zettels {
+	for _, z := range zettels {
 		iso++
 		newDirPath := filepath.Join(zetDir, fmt.Sprintf("%d", iso))
 		if err := dir(newDirPath); err != nil {
@@ -39,8 +39,6 @@ func SplitZettel(zetDir, zettelDir, b string) error {
 		if err := Add(newDirPath, "", z.Title, z.Body, "", currLink, false); err != nil {
 			return fmt.Errorf("Error adding sub-zettels: %v", err)
 		}
-
-		fmt.Printf("[%d] Added zettel: %q\n", i+1, z.Title)
 	}
 
 	return nil
