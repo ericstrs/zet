@@ -100,7 +100,7 @@ func AddCmd(args []string) error {
 	}
 
 	// Otherwise, just create the zettel without opening it.
-	if err := Add(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
+	if err := CreateAdd(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
 		return err
 	}
 
