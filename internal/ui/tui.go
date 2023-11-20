@@ -250,22 +250,21 @@ func (sui *SearchUI) listInput(zetDir, editor string) {
 				cell := sui.list.GetCell(row, col)
 				switch z := cell.GetReference().(type) {
 				case *storage.ResultZettel:
-					fp := filepath.Join(zetDir, z.DirName)
-					fp = filepath.Join(fp, z.Name)
+					fz := filepath.Join(zetDir, z.DirName)
+					fp := filepath.Join(fz, z.Name)
 					sui.app.Stop()
-					if err := runCmd(zetDir, editor, fp); err != nil {
+					if err := runCmd(fz, editor, fp); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				case *storage.Zettel:
-					fp := filepath.Join(zetDir, z.DirName)
-					fp = filepath.Join(fp, z.Name)
+					fz := filepath.Join(zetDir, z.DirName)
+					fp := filepath.Join(fz, z.Name)
 					sui.app.Stop()
-					if err := runCmd(zetDir, editor, fp); err != nil {
+					if err := runCmd(fz, editor, fp); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				default:
-					//log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel.")
-					log.Printf("Type not supported: %T\n", z)
+					log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel: %T\n", z)
 				}
 				return nil
 			case 'H': // move to top of the visible window
