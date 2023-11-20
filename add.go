@@ -31,10 +31,10 @@ var addUsage = `NAME
 
 USAGE
 
-	zet a|add                - Adds new zettel and opens for editing.
-	zet a|add [title]        - Adds new zettel with provided title.
-	zet a|add [title] [body] - Adds new zettel with provided title and body.
-	zet a|add help           - Provides command information.
+	zet add|a                - Adds new zettel and opens for editing.
+	zet add|a [title]        - Adds new zettel with provided title.
+	zet add|a [title] [body] - Adds new zettel with provided title and body.
+	zet add|a help           - Provides command information.
 
 DESCRIPTION
 
@@ -181,7 +181,14 @@ func Add(newDirPath, editor, title, body, stdin, link string, open bool) error {
 		if err := runCmd(newDirPath, editor, zfpath); err != nil {
 			return fmt.Errorf("Failed to open new zettel: %v", err)
 		}
+		return nil
 	}
+
+	newLink, err := meta.Link(newDirPath)
+	if err != nil {
+		return fmt.Errorf("Error getting newly added zettel's link: %v", err)
+	}
+	fmt.Println(newLink)
 
 	return nil
 }
