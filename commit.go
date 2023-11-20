@@ -36,7 +36,7 @@ func CommitCmd(args []string) error {
 	switch n {
 	case 2: // no args, use pwd as path
 		// Get path to zettel directory and ensure user is in a zettel.
-		p, ok, err := meta.InZettel()
+		p, ok, err := meta.InZettel(c.ZetDir)
 		if err != nil {
 			return fmt.Errorf("Failed to check if user is in a zettel: %v", err)
 		}
