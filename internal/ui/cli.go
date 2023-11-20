@@ -170,6 +170,7 @@ func SplitCmd(args []string) error {
 	default:
 		if strings.ToLower(os.Args[2]) == `help` {
 			fmt.Printf(splitUsage)
+			return nil
 		}
 		p := filepath.Join(c.ZetDir, args[2])
 
