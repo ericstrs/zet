@@ -36,7 +36,7 @@ func ListCmd(args []string) error {
 
 	switch n {
 	case 2: // no args
-		l, err := List(c.ZetDir, `dir_name DESC`)
+		l, err := List(c.ZetDir, `dir_name ASC`)
 		if err != nil {
 			return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 		}
