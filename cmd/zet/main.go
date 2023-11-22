@@ -17,6 +17,7 @@ Commands:
 	link    - Prints the link of a zettel.
 	isosec  - Prints the current ISO date to the millisecond.
 	commit  - Performs a git commit using zettel's title.
+	config  - Displays configuration directory path.
 
 Appending "help" after any command will print command info.
 */
@@ -48,6 +49,7 @@ COMMANDS
 	link    - Prints the link of a zettel.
 	isosec  - Prints the current ISO date to the millisecond.
 	commit  - Performs a git commit using zettel's title.
+	config  - Displays configuration directory path.
 
 Appending "help" after any command will print more command info.
 `
@@ -61,9 +63,11 @@ func main() {
 func Run() error {
 	args := os.Args
 	if len(args) == 1 {
-		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
-		fmt.Fprintf(os.Stderr, usage)
-		os.Exit(1)
+		args = append(args, `search`, `browse`)
+		if err := ui.SearchCmd(args); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	switch strings.ToLower(os.Args[1]) {
@@ -80,7 +84,7 @@ func Run() error {
 			return err
 		}
 	case `list`, `ls`:
-		if err := meta.ListCmd(args); err != nil {
+		if err := ui.ListCmd(args); err != nil {
 			return err
 		}
 	case `search`:
@@ -91,12 +95,20 @@ func Run() error {
 		if err := ui.SplitCmd(args); err != nil {
 			return fmt.Errorf("Error splitting zettel: %v", err)
 		}
+	case `merge`:
+		if err := ui.MergeCmd(args); err != nil {
+			return fmt.Errorf("Error merging zettels: %v", err)
+		}
 	case `content`:
 		if err := ui.ContentCmd(args); err != nil {
 			return fmt.Errorf("Error getting content from zettel: %v", err)
 		}
 	case `isosec`:
 		z.IsosecCmd(args)
+	case `config`:
+		if err := ui.ConfigCmd(args); err != nil {
+			return fmt.Errorf("Error getting config: %v", err)
+		}
 	case `help`:
 		fmt.Printf(usage)
 	default:
