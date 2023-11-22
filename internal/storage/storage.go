@@ -73,6 +73,10 @@ type Link struct {
 	ToZettelID   int    `db:"to_zettel_id"`   // zettel id where link points to
 }
 
+func (s *Storage) GetDB() *sqlx.DB {
+	return s.db
+}
+
 // AllZettels returns all existing zettel files with optional sorting.
 // Optional argument should be a valid SQL ORDER BY clause, e.g., "mtime DESC".
 func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
@@ -515,7 +519,7 @@ func SplitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 		matches := linkRegex.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			iso := matches[2]
-			id, err := zettelIdDir(tx, iso)
+			id, err := ZettelIdDir(tx, iso)
 			if err != nil {
 				// If referenced zettel id couldn't be found, skip link
 				continue
@@ -550,9 +554,9 @@ func SplitZettel(tx *sqlx.Tx, z *Zettel, content string) {
 	z.Body = strings.Join(bodyLines, "\n")
 }
 
-// zettelIdDir retrieves and returns the zettel using a given unique
+// ZettelIdDir retrieves and returns the zettel using a given unique
 // isosec (director name).
-func zettelIdDir(tx *sqlx.Tx, iso string) (int, error) {
+func ZettelIdDir(tx *sqlx.Tx, iso string) (int, error) {
 	const query = `SELECT id FROM zettel WHERE dir_name=$1 LIMIT 1;`
 	var id int
 	err := tx.Get(&id, query, iso)
@@ -940,7 +944,7 @@ func (s *Storage) Merge(rootContent string) (string, error) {
 			iso := matches[2]
 
 			// Ensure zettel directory in the link is unique.
-			id, err := zettelIdDir(tx, iso)
+			id, err := ZettelIdDir(tx, iso)
 			if err != nil {
 				// If referenced zettel id couldn't be found, skip link
 				continue
