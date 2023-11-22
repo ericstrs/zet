@@ -156,7 +156,7 @@ func Add(newDirPath, editor, title, body, stdin, link string, open bool) error {
 	}
 	defer f.Close()
 
-	fullText := "# " + title
+	fullText := "# " + title + "\n"
 	if body != "" {
 		fullText += body
 	}
