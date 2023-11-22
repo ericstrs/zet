@@ -31,16 +31,15 @@ USAGE
 	`
 	splitUsage = `NAME
 
-	split  - Splits up a given zettel into sub-zettels.
+	split - splits up a given zettel into sub-zettels.
 
 USAGE
 
 	zet split          - Splits zettel content from stdin into sub-zettels.
-	zet split [isosec] - Splits zettel content from README.md in isosec directory into sub-zettels.
-	`
+	zet split [isosec] - Splits zettel content from README.md in isosec directory into sub-zettels.`
 	contentUsage = `NAME
 
-	content - Prints different sections of zettel content.
+	content - prints different sections of zettel content.
 
 USAGE
 
@@ -82,6 +81,15 @@ DESCRIPTION
 
 	` + "`" + `$zet merge < output.md > output.md` + "`" + `
 `
+	configUsage = `NAME
+
+  config - displays configuration properties.
+
+USAGE
+
+  zet config     - prints configuration file.
+  zet config dir - Prints path to configuration directory.
+  `
 )
 
 func SearchCmd(args []string) error {
@@ -95,6 +103,12 @@ func SearchCmd(args []string) error {
 	}
 	defer s.Close()
 	n := len(args)
+
+	if n < 3 {
+		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
+		fmt.Fprintln(os.Stderr, searchUsage)
+		os.Exit(1)
+	}
 
 	if n >= 3 {
 		query := strings.Join(args[3:], " ")
@@ -121,6 +135,8 @@ func SearchCmd(args []string) error {
 			if err := NewSearchUI(s, query, c.ZetDir, c.Editor).Run(); err != nil {
 				return fmt.Errorf("Error running search ui: %v", err)
 			}
+		default:
+			fmt.Println(searchUsage)
 		}
 	}
 
@@ -459,6 +475,28 @@ func MergeCmd(args []string) error {
 	}
 	if mc != "" {
 		fmt.Println(mc)
+	}
+	return nil
+}
+
+func ConfigCmd(args []string) error {
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	if n == 2 {
+		fmt.Printf("ZET_DIR=%s\n", c.ZetDir)
+		fmt.Printf("EDITOR=%s\n", c.Editor)
+		return nil
+	}
+
+	switch strings.ToLower(os.Args[2]) {
+	case `dir`:
+		fmt.Println(filepath.Join(c.ConfDir, c.File))
+	default:
+		fmt.Println(configUsage)
 	}
 	return nil
 }
