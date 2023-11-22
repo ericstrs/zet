@@ -233,15 +233,24 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 }
 
 // listInput handles input capture for the list.
+//
+// It interprets the following key bindings and triggers corresponding
+// actions:
+//
+//   - l: Open selected zettel.
+//   - H: Move to the top of the visible window.
+//   - M: Move to the center of the visible window.
+//   - L: Move to bottom of the visible window.
+//   - ESC, q: Exits the search interface.
+//   - space: Page down
+//   - b: Page up
+//   - ESC, q: Exits the search interface.
+//
+// If selection is on first result and 'k' is pressed, set focus on
+// input field.
 func (sui *SearchUI) listInput(zetDir, editor string) {
 	sui.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-		case 'M': // move to middle of the visible window
-			row, _ := sui.list.GetOffset()
-			_, _, _, height := sui.list.GetInnerRect()
-			sui.list.Select(row+height/2, 0)
-			return nil
-		case 'L': // move to bottom of the visible window
 		case tcell.KeyEscape:
 			sui.app.Stop()
 		default:
