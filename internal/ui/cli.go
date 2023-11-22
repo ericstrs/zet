@@ -28,58 +28,58 @@ USAGE
   zet search query|q [term]  - Print zettels given a search term.
   zet search browse|b [term] - Interactively search for a zettel.
   zet search help            - Print zettels given a search term.
-	`
+`
 	splitUsage = `NAME
 
-	split - splits up a given zettel into sub-zettels.
+  split - splits up a given zettel into sub-zettels.
 
 USAGE
 
-	zet split          - Splits zettel content from stdin into sub-zettels.
-	zet split [isosec] - Splits zettel content from README.md in isosec directory into sub-zettels.`
+  zet split          - Splits zettel content from stdin into sub-zettels.
+  zet split [isosec] - Splits zettel content from README.md in isosec directory into sub-zettels.`
 	contentUsage = `NAME
 
-	content - prints different sections of zettel content.
+  content - prints different sections of zettel content.
 
 USAGE
 
-	zet content title - Prints title from README.md in current directory or in given directory.
-	zet content body  - Prints body from README.md in current directory or in given directory.
-	zet content links - Prints links from README.md in current directory or in given directory.
-	zet content tags  - Prints tags from README.md in current directory or in given directory.
-	`
+  zet content title - Prints title from README.md in current directory or in given directory.
+  zet content body  - Prints body from README.md in current directory or in given directory.
+  zet content links - Prints links from README.md in current directory or in given directory.
+  zet content tags  - Prints tags from README.md in current directory or in given directory.
+`
 	mergeUsage = `NAME
 
-	merge - Merges the contents of split zettel's into single body of text.
+  merge - Merges the contents of split zettel's into single body of text.
 
 USAGE
 
-	zet merge [isosec] - Merges contents of split linked zettel's at given isosec directory or using stdin.
+  zet merge [isosec] - Merges contents of split linked zettel's at given isosec directory or using stdin.
 
 DESCRIPTION
 
-	The non-linear nature of a Zettelkasten is one of its main strengths,
-	but sometimes a linear representation is more suitable.
+  The non-linear nature of a Zettelkasten is one of its main strengths,
+  but sometimes a linear representation is more suitable.
 
-	Printing to standard output rather than writing to a file creates
-	flexibility is how you can use this command. It allows the user to
-	view the merged content in various ways (viewing, redirecting to a
-	file, further processing with other tools).
+  Printing to standard output rather than writing to a file creates
+  flexibility is how you can use this command. It allows the user to
+  view the merged content in various ways (viewing, redirecting to a
+  file, further processing with other tools).
 
-	Example usage:
+  Example usage:
 
-	Print merged content to pager:
+  Print merged content to pager:
 
-	` + "`" + `$ zet merge 20231118194243 | less` + "`" + `
+  ` + "`" + `$ zet merge 20231118194243 | less` + "`" + `
 
-	Piped merged content to file:
+  Piped merged content to file:
 
-	` + "`" + `$ zet merge 20231118194243 > output.md` + "`" + `
+  ` + "`" + `$ zet merge 20231118194243 > output.md` + "`" + `
 
-	The file output.md can then be used to retrieve the next level of
-	sub-zettels:
+  The file output.md can then be used to retrieve the next level of
+  sub-zettels:
 
-	` + "`" + `$zet merge < output.md > output.md` + "`" + `
+  ` + "`" + `$zet merge < output.md > output.md` + "`" + `
 `
 	configUsage = `NAME
 
@@ -89,7 +89,26 @@ USAGE
 
   zet config     - prints configuration file.
   zet config dir - Prints path to configuration directory.
-  `
+`
+	listUsage = `NAME
+
+  list - lists all the zettels.
+
+USAGE
+
+  zet list|ls          - Prints all zettels to stdout sorted by creation date.
+  zet list|ls recent   - Prints all zettels sorted by modification time.
+  zet list|ls length   - Prints all zettels sorted by word count.
+  zet list|ls alpha    - Prints all zettels by alphabetically sorted titles.
+  zet list|ls help     - Provides command information.
+
+DESCRIPTION
+
+  The list command serves as a tool viewing a collection of zettels. This
+  command displays a list of all zettels stored in the system. Its main
+  purpose is to output all zettels in an organized manner, in ascending
+  order.
+`
 )
 
 func SearchCmd(args []string) error {
@@ -106,7 +125,7 @@ func SearchCmd(args []string) error {
 
 	if n < 3 {
 		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
-		fmt.Fprintln(os.Stderr, searchUsage)
+		fmt.Fprintf(os.Stderr, searchUsage)
 		os.Exit(1)
 	}
 
@@ -136,7 +155,7 @@ func SearchCmd(args []string) error {
 				return fmt.Errorf("Error running search ui: %v", err)
 			}
 		default:
-			fmt.Println(searchUsage)
+			fmt.Printf(searchUsage)
 		}
 	}
 
@@ -256,7 +275,7 @@ func ContentCmd(args []string) error {
 			return err
 		}
 	case `help`:
-		fmt.Println(contentUsage)
+		fmt.Printf(contentUsage)
 	}
 
 	return nil
@@ -496,7 +515,56 @@ func ConfigCmd(args []string) error {
 	case `dir`:
 		fmt.Println(filepath.Join(c.ConfDir, c.File))
 	default:
-		fmt.Println(configUsage)
+		fmt.Printf(configUsage)
+	}
+	return nil
+}
+
+// ListCmd parses and validates user arguments for the list command.
+// If arguments are valid, it calls the desired operation.
+func ListCmd(args []string) error {
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	var zettels []storage.Zettel
+	var err error
+	switch n {
+	case 2: // no args
+		zettels, err = meta.List(c.ZetDir, `dir_name ASC`)
+		if err != nil {
+			return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+		}
+	case 3: // one arg
+		switch strings.ToLower(args[2]) {
+		case `recent`:
+			zettels, err = meta.List(c.ZetDir, `mtime ASC`)
+			if err != nil {
+				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+			}
+		case `alpha`:
+			zettels, err = meta.List(c.ZetDir, `title ASC`)
+			if err != nil {
+				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+			}
+		case `length`:
+			zettels, err = meta.List(c.ZetDir, `LENGTH(body) ASC`)
+			if err != nil {
+				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+			}
+		case `help`:
+			fmt.Printf(listUsage)
+			return nil
+		default:
+			fmt.Fprintln(os.Stderr, "Error: incorrect sub-command.")
+			fmt.Fprintf(os.Stderr, listUsage)
+			os.Exit(1)
+		}
+	}
+	for _, z := range zettels {
+		fmt.Println(yellow + z.DirName + reset + " " + z.Title)
 	}
 	return nil
 }
