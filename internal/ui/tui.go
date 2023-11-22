@@ -85,7 +85,6 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 			}
 			debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
 				go func() {
-					startTime := time.Now()
 					latestText := sui.inputField.GetText()
 					if latestText == "" {
 						sui.app.QueueUpdateDraw(func() {
@@ -94,9 +93,6 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 						return
 					}
 					zettels := sui.performSearch(latestText)
-					duration := time.Since(startTime)
-					_ = duration
-					fmt.Println(" ", duration)
 					sui.app.QueueUpdateDraw(func() {
 						sui.updateList(zettels)
 					})
@@ -157,7 +153,7 @@ func (sui *SearchUI) ipInput(zetDir, editor string) {
 			}
 
 			if err := zet.CreateAdd(zetDir, editor, text, "", "", currLink, true); err != nil {
-				log.Printf("Failed to add zettel: %v", err)
+				log.Printf("Failed to add zettel: %v\n", err)
 			}
 		}
 		return event
@@ -264,7 +260,7 @@ func (sui *SearchUI) listInput(zetDir, editor string) {
 						fmt.Fprintf(os.Stderr, "Failed to open new zettel: %v", err)
 					}
 				default:
-					log.Println("Table cell doesn't reference storage.ResultZettel or storage.Zettel: %T\n", z)
+					log.Printf("Table cell doesn't reference storage.ResultZettel or storage.Zettel: %T\n", z)
 				}
 				return nil
 			case 'H': // move to top of the visible window
