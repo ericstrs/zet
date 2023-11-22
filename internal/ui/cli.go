@@ -148,6 +148,16 @@ USAGE:
     an existing zettel directory, the newly created zettel will have link
     to existing zettel.
 `
+	commitUsage = `NAME
+
+    commit - performs a git commit using zettel's title.
+
+  USAGE
+
+    zet commit      - Commits the README.md file in current directory.
+    zet commit all  - Commits all modified/new README.md files.
+    zet commit help - Provides command information.
+`
 )
 
 func SearchCmd(args []string) error {
@@ -695,7 +705,7 @@ func AddCmd(args []string) error {
 	}
 
 	// Otherwise, just create the zettel without opening it.
-	if err := CreateAdd(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
+	if err := zet.CreateAdd(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
 		return err
 	}
 
@@ -709,7 +719,7 @@ func IsosecCmd(args []string) {
 	n := len(args)
 	switch n {
 	case 2:
-		iso = Isosec()
+		iso = zet.Isosec()
 	case 3:
 		if strings.ToLower(args[2]) == `help` {
 			fmt.Println(isoUsage)
@@ -717,4 +727,57 @@ func IsosecCmd(args []string) {
 		}
 	}
 	fmt.Println(iso)
+}
+
+// CommitCmd parses and validates user arguments for the commit command.
+// If arguments are valid, it calls the desired operation.
+func CommitCmd(args []string) error {
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	switch n {
+	case 2: // no args, use pwd as path
+		// Get path to zettel directory and ensure user is in a zettel.
+		p, ok, err := meta.InZettel(c.ZetDir)
+		if err != nil {
+			return fmt.Errorf("Failed to check if user is in a zettel: %v", err)
+		}
+		if !ok {
+			return errors.New("not in a zettel")
+		}
+		p = filepath.Join(p, `README.md`)
+
+		// Get zettel title to use as commit message body.
+		t, err := meta.Title(p)
+		if err != nil {
+			return fmt.Errorf("Failed to retrieve zettel title: %v", err)
+		}
+
+		if err := zet.Commit(".", p, t); err != nil {
+			return fmt.Errorf("Failed to commit zettel: %v", err)
+		}
+	case 3: // one arg
+		switch strings.ToLower(args[2]) {
+		case `help`:
+			fmt.Println(commitUsage)
+			return nil
+		case `all`:
+			files, err := zet.ReadmeFiles(c.ZetDir)
+			if err != nil {
+				return fmt.Errorf("Failed to retrieve files to commit: %v", err)
+			}
+			if err := zet.CommitBulk(c.ZetDir, files); err != nil {
+				return fmt.Errorf("Failed to commit zettels: %v", err)
+			}
+		default:
+			fmt.Fprintln(os.Stderr, "Error: incorrect sub-command.")
+			fmt.Fprintf(os.Stderr, commitUsage)
+			os.Exit(1)
+		}
+	}
+
+	return nil
 }
