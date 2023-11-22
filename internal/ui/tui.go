@@ -67,7 +67,6 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 	zettels := []storage.Zettel{storage.Zettel{Title: t}}
 	go func() {
 		zettels, _ = sui.storage.AllZettels(`dir_name DESC`)
-		sui.displayAll(zettels)
 		sui.app.QueueUpdateDraw(func() {
 			text := sui.inputField.GetText()
 			if text == "" {
@@ -112,6 +111,7 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 	style := tcell.StyleDefault.Background(tcell.Color107).Foreground(tcell.ColorBlack)
 	sui.list.SetSelectedStyle(style)
 	sui.listInput(zetDir, editor)
+
 	switch query {
 	case "":
 		sui.displayAll(zettels)
