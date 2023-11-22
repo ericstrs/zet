@@ -171,18 +171,34 @@ func createSnippets(body, before, after string) string {
 
 // preprocessInput processes user input for fts5 search.
 func preprocessInput(s string) string {
-	s = preprocessTags(s)
+	s = convertAlias(s)
 	return s
 }
 
-// preprocessTags handles the conversion of "#tag" syntax into a
-// FTS-friendly string.
-func preprocessTags(s string) string {
-	re := regexp.MustCompile(`#\w+`)
-	return re.ReplaceAllStringFunc(s, func(tag string) string {
-		tag = strings.TrimPrefix(tag, "#")
-		return "tags:" + tag
-	})
+// convertAlias converts a user query with aliases into an FTS5 query.
+// Aliases are only considered if they are at the beginning of the query.
+func convertAlias(s string) string {
+	aliasMap := map[string]string{
+		`t:`: `title:`,
+		`b:`: `body:`,
+		`#:`: `tags:`,
+	}
+	tokens := strings.Fields(s)
+
+	// Translate the first token if it matches an alias
+	if len(tokens) > 0 {
+		firstToken := tokens[0]
+		for alias, columnName := range aliasMap {
+			if strings.HasPrefix(firstToken, alias) {
+				tokens[0] = strings.Replace(firstToken, alias, columnName, 1)
+				break
+			}
+		}
+	}
+
+	q := strings.Join(tokens, " ")
+
+	return q
 }
 
 // zettelTags retrieves and assigns tags to the given zettel.
