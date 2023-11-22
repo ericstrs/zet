@@ -664,7 +664,7 @@ func AddCmd(args []string) error {
 	// Assign title and body based on positional arguments
 	if n > 2 {
 		if strings.ToLower(args[2]) == `help` {
-			fmt.Println(addUsage)
+			fmt.Printf(addUsage)
 			return nil
 		}
 		title = args[2]
@@ -722,7 +722,7 @@ func IsosecCmd(args []string) {
 		iso = zet.Isosec()
 	case 3:
 		if strings.ToLower(args[2]) == `help` {
-			fmt.Println(isoUsage)
+			fmt.Printf(isoUsage)
 			return
 		}
 	}
@@ -762,7 +762,7 @@ func CommitCmd(args []string) error {
 	case 3: // one arg
 		switch strings.ToLower(args[2]) {
 		case `help`:
-			fmt.Println(commitUsage)
+			fmt.Printf(commitUsage)
 			return nil
 		case `all`:
 			files, err := zet.ReadmeFiles(c.ZetDir)
