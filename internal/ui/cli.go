@@ -109,6 +109,15 @@ DESCRIPTION
   purpose is to output all zettels in an organized manner, in ascending
   order.
 `
+	linkUsage = `NAME
+  link - prints zettel link
+
+USAGE:
+
+  zet link          - Prints zettel link for the current dir.
+  zet link [isosec] - Prints zettel link for the given dir isosec.
+  zet link help     - Provides command information.
+`
 )
 
 func SearchCmd(args []string) error {
@@ -566,5 +575,38 @@ func ListCmd(args []string) error {
 	for _, z := range zettels {
 		fmt.Println(yellow + z.DirName + reset + " " + z.Title)
 	}
+	return nil
+}
+
+// LinkCmd parses and validates user arguments for the link command.
+// If arguments are valid, it calls the desired operation.
+func LinkCmd(args []string) error {
+	var l string
+	var err error
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	switch n {
+	case 2: // no args, use pwd as path
+		l, err = meta.CurrLink(c.ZetDir)
+		if err != nil {
+			return err
+		}
+	case 3: // one arg, use c.ZetDir/arg as path
+		if strings.ToLower(args[2]) == `help` {
+			fmt.Println(linkUsage)
+			return nil
+		}
+		p := filepath.Join(c.ZetDir, args[2])
+		l, err = meta.Link(p)
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Println(l)
 	return nil
 }

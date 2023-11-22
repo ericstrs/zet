@@ -8,57 +8,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/iuiq/zet/internal/config"
 )
 
 const (
-	linkUsage = `NAME
-	link - prints zettel link
-
-USAGE:
-
-	zet link          - Prints zettel link for the current dir.
-	zet link [isosec] - Prints zettel link for the given dir isosec.
-	zet link help     - Provides command information.`
-
 	// linkFormat is the format for a zettel link. It should take the form
 	// `* [dir](../dir/) title`
 	linkFormat = "* [%s](../%s) %s"
 )
-
-// LinkCmd parses and validates user arguments for the link command.
-// If arguments are valid, it calls the desired operation.
-func LinkCmd(args []string) error {
-	var l string
-	var err error
-	c := new(config.C)
-	if err := c.Init(); err != nil {
-		return fmt.Errorf("Failed to initialize configuration file: %v", err)
-	}
-	n := len(args)
-
-	switch n {
-	case 2: // no args, use pwd as path
-		l, err = CurrLink(c.ZetDir)
-		if err != nil {
-			return err
-		}
-	case 3: // one arg, use c.ZetDir/arg as path
-		if strings.ToLower(args[2]) == `help` {
-			fmt.Println(linkUsage)
-			return nil
-		}
-		p := filepath.Join(c.ZetDir, args[2])
-		l, err = Link(p)
-		if err != nil {
-			return err
-		}
-	}
-
-	fmt.Println(l)
-	return nil
-}
 
 // CurrLink returns the zettel link for the current zettel.
 func CurrLink(zetDir string) (string, error) {
