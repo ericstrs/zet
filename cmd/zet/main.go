@@ -29,8 +29,6 @@ import (
 	"os"
 	"strings"
 
-	z "github.com/iuiq/zet"
-	"github.com/iuiq/zet/internal/meta"
 	"github.com/iuiq/zet/internal/ui"
 )
 
@@ -72,15 +70,15 @@ func Run() error {
 
 	switch strings.ToLower(os.Args[1]) {
 	case `add`, `a`: // add a new zettel
-		if err := z.AddCmd(args); err != nil {
+		if err := ui.AddCmd(args); err != nil {
 			return fmt.Errorf("Failed to add a zettel: %v", err)
 		}
 	case `link`: // get zettel link
-		if err := meta.LinkCmd(args); err != nil {
+		if err := ui.LinkCmd(args); err != nil {
 			return fmt.Errorf("Failed to retrieve zettel link: %v", err)
 		}
 	case `commit`:
-		if err := z.CommitCmd(args); err != nil {
+		if err := ui.CommitCmd(args); err != nil {
 			return err
 		}
 	case `list`, `ls`:
@@ -104,7 +102,7 @@ func Run() error {
 			return fmt.Errorf("Error getting content from zettel: %v", err)
 		}
 	case `isosec`:
-		z.IsosecCmd(args)
+		ui.IsosecCmd(args)
 	case `config`:
 		if err := ui.ConfigCmd(args); err != nil {
 			return fmt.Errorf("Error getting config: %v", err)
