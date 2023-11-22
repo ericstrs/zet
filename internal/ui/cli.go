@@ -118,6 +118,36 @@ USAGE:
   zet link [isosec] - Prints zettel link for the given dir isosec.
   zet link help     - Provides command information.
 `
+	isoUsage = `NAME
+
+    isosec - prints the current ISO date to the millisecond.
+
+  USAGE
+
+    zet isosec      - Print current ISO date to the millisecond.
+    zet isosec help - Provides command information.
+`
+	addUsage = `NAME
+
+    add - adds a new zettel with the given title and content.
+
+  USAGE
+
+    zet add|a                - Adds new zettel and opens for editing.
+    zet add|a [title]        - Adds new zettel with provided title.
+    zet add|a [title] [body] - Adds new zettel with provided title and body.
+    zet add|a help           - Provides command information.
+
+  DESCRIPTION
+
+    All the above scenarios accept standard input. In which, content from
+    Stdin is always appended after any argument data. Providing non-empty
+    Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
+
+    Auto-linking is enabled by default. If calling the add command from
+    an existing zettel directory, the newly created zettel will have link
+    to existing zettel.
+`
 )
 
 func SearchCmd(args []string) error {
@@ -597,7 +627,7 @@ func LinkCmd(args []string) error {
 		}
 	case 3: // one arg, use c.ZetDir/arg as path
 		if strings.ToLower(args[2]) == `help` {
-			fmt.Println(linkUsage)
+			fmt.Printf(linkUsage)
 			return nil
 		}
 		p := filepath.Join(c.ZetDir, args[2])
@@ -609,4 +639,82 @@ func LinkCmd(args []string) error {
 
 	fmt.Println(l)
 	return nil
+}
+
+// AddCmd parses and validates user arguments for the add command.
+// If arguments are valid, it calls the desired operation.
+func AddCmd(args []string) error {
+	var title, body, stdin string
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	// Assign title and body based on positional arguments
+	if n > 2 {
+		if strings.ToLower(args[2]) == `help` {
+			fmt.Println(addUsage)
+			return nil
+		}
+		title = args[2]
+	}
+	if n > 3 {
+		body = args[3]
+	}
+
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return fmt.Errorf("Failed to get info on stdin: %v", err)
+	}
+	// If the Stdin is from a pipe
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
+		// Read stdin content, if available
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			stdin += line + "\n"
+		}
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("Error reading from stdin: %v", err)
+		}
+		// Remove the last newline character from stdin
+		stdin = strings.TrimSuffix(stdin, "\n")
+	}
+
+	// If current link cannot be found, skip auto-linking
+	currLink, err := meta.CurrLink(c.ZetDir)
+	if err != nil {
+		currLink = ""
+	}
+
+	var openZettel bool
+	// If no title and no body and no stdin, then open newly created zettel.
+	if title == "" && body == "" && stdin == "" {
+		openZettel = true
+	}
+
+	// Otherwise, just create the zettel without opening it.
+	if err := CreateAdd(c.ZetDir, c.Editor, title, body, stdin, currLink, openZettel); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsosecCmd parses and validates user arguments for the isosec command.
+// If arguments are valid, it calls the desired operation.
+func IsosecCmd(args []string) {
+	var iso string
+	n := len(args)
+	switch n {
+	case 2:
+		iso = Isosec()
+	case 3:
+		if strings.ToLower(args[2]) == `help` {
+			fmt.Println(isoUsage)
+			return
+		}
+	}
+	fmt.Println(iso)
 }
