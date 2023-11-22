@@ -392,7 +392,7 @@ func addZettel(tx *sqlx.Tx, dirPath string, files []os.DirEntry) error {
 	return nil
 }
 
-// ContainsMD checks if a slice of files contains a README.md file.
+// ContainsMD reports whether a slice of files contains a README.md file.
 func ContainsMD(files []os.DirEntry) bool {
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), ".md") {

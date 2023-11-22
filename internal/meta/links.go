@@ -38,7 +38,7 @@ func CurrLink(zetDir string) (string, error) {
 // InZettel checks if the user is in a zettel. This is done by checking
 // if the current working directory's parent directory path is equal to
 // saved zettel directory path. It returns path to current working
-// directory, whether or not user is in a zettel directory, and an error
+// directory, reports whether user is in a zettel directory, and an error
 // indicating if something went wrong with retrieving the current
 // working directory.
 func InZettel(zetDir string) (string, bool, error) {

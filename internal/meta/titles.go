@@ -58,7 +58,7 @@ func Title(path string) (string, error) {
 	return t, nil
 }
 
-// IsFile checks to see if a path exists and correspond to a file.
+// IsFile reports whether a path exists and corresponds to a file.
 func IsFile(p string) (bool, error) {
 	info, err := os.Stat(p)
 	if err != nil {

@@ -52,14 +52,14 @@ func (c *C) Init() error {
 	return nil
 }
 
-// Dir returns the user defined configuration directory. An error is
+// dir returns the user defined configuration directory. An error is
 // returned if the location cannot be determined.
 func dir() (string, error) {
 	dir, err := os.UserConfigDir()
 	return dir, err
 }
 
-// ConfPath returns the path to the configuration file.
+// confPath returns the path to the configuration file.
 func (c C) confPath() string {
 	return filepath.Join(c.ConfDir, c.Id, c.File)
 }
@@ -88,7 +88,7 @@ func zetDir() (string, error) {
 	return path, errors.New("Config file and $ZET_DIR not found")
 }
 
-// IsDir checks if a given path exists and is a directory.
+// isDir reports whether a given path exists and is a directory.
 func isDir(path string) (bool, error) {
 	// Use os.Stat to get information about the path
 	info, err := os.Stat(path)
@@ -101,7 +101,7 @@ func isDir(path string) (bool, error) {
 	return info.IsDir(), nil
 }
 
-// PreferredEditor returns the user's preferred editor based the priority:
+// preferredEditor returns the user's preferred editor based the priority:
 func preferredEditor() (string, error) {
 	if visual := os.Getenv("VISUAL"); visual != "" {
 		return visual, nil
@@ -124,7 +124,7 @@ func preferredEditor() (string, error) {
 	return "", errors.New("No text editor found")
 }
 
-// HasCmd checks if a command is available on the system.
+// hasCmd reports whether a command is available on the system.
 func hasCmd(name string) (string, bool) {
 	p, err := exec.LookPath(name)
 	return p, err == nil
