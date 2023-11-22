@@ -75,37 +75,9 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 		})
 	}()
 
-	var debounceTimer *time.Timer
 	sui.inputField.SetLabel("Search: ").
-		SetFieldWidth(30).
-		SetChangedFunc(func(text string) {
-			if debounceTimer != nil {
-				debounceTimer.Stop()
-			}
-			debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
-				go func() {
-					latestText := sui.inputField.GetText()
-					if latestText == "" {
-						sui.app.QueueUpdateDraw(func() {
-							sui.displayAll(zettels)
-						})
-						return
-					}
-					zettels := sui.performSearch(latestText)
-					sui.app.QueueUpdateDraw(func() {
-						sui.updateList(zettels)
-					})
-				}()
-
-			})
-		}).
-		SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEnter {
-				sui.list.SetSelectable(true, false)
-				sui.app.SetFocus(sui.list)
-			}
-		})
-	sui.ipInput(zetDir, editor)
+		SetFieldWidth(30)
+	sui.ipInput(zetDir, editor, &zettels)
 
 	sui.list.SetBorder(true)
 	style := tcell.StyleDefault.Background(tcell.Color107).Foreground(tcell.ColorBlack)
@@ -140,7 +112,15 @@ func (sui *SearchUI) globalInput() {
 }
 
 // ipInput handles input capture for the inputField.
-func (sui *SearchUI) ipInput(zetDir, editor string) {
+//
+// It interprets the following key bindings and triggers corresponding
+// actions:
+//
+//   - Enter: Sets focus to results list.
+//   - Ctrl+Enter: Uses current search query as title for new zettel.
+//   - Esc: Exits the search interface.
+func (sui *SearchUI) ipInput(zetDir, editor string, zettels *[]storage.Zettel) {
+	var debounceTimer *time.Timer
 	sui.inputField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// If ctrl+enter pressed, create and open zettel.
 		if event.Modifiers() == 2 && event.Rune() == 10 {
@@ -158,6 +138,32 @@ func (sui *SearchUI) ipInput(zetDir, editor string) {
 		}
 		return event
 	})
+	sui.inputField.SetChangedFunc(func(text string) {
+		if debounceTimer != nil {
+			debounceTimer.Stop()
+		}
+		debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+			go func() {
+				latestText := sui.inputField.GetText()
+				if latestText == "" {
+					sui.app.QueueUpdateDraw(func() {
+						sui.displayAll(*zettels)
+					})
+					return
+				}
+				zettels := sui.performSearch(latestText)
+				sui.app.QueueUpdateDraw(func() {
+					sui.updateList(zettels)
+				})
+			}()
+		})
+	}).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEnter {
+				sui.list.SetSelectable(true, false)
+				sui.app.SetFocus(sui.list)
+			}
+		})
 }
 
 func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
@@ -230,7 +236,6 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 func (sui *SearchUI) listInput(zetDir, editor string) {
 	sui.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-
 		case 'M': // move to middle of the visible window
 			row, _ := sui.list.GetOffset()
 			_, _, _, height := sui.list.GetInnerRect()
