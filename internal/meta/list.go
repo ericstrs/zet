@@ -8,8 +8,8 @@ import (
 
 // List retrieves a list of zettels. It synchronizes the database and
 // gets list of zettels.
-func List(zetPath, sort string) ([]storage.Zettel, error) {
-	s, err := storage.UpdateDB(zetPath)
+func List(zetPath, dbPath, sort string) ([]storage.Zettel, error) {
+	s, err := storage.UpdateDB(zetPath, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to sync database: %v", err)
 	}

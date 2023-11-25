@@ -165,7 +165,7 @@ func SearchCmd(args []string) error {
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
-	s, err := storage.UpdateDB(c.ZetDir)
+	s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
 	if err != nil {
 		return fmt.Errorf("Error syncing database and flat files: %v", err)
 	}
@@ -484,7 +484,7 @@ func MergeCmd(args []string) error {
 
 	switch n {
 	case 2: // Root zettel content comes from stdin
-		s, err := storage.UpdateDB(c.ZetDir)
+		s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
 		if err != nil {
 			return fmt.Errorf("Error syncing database and flat files: %v", err)
 		}
@@ -507,7 +507,7 @@ func MergeCmd(args []string) error {
 			fmt.Printf(mergeUsage)
 			break
 		}
-		s, err := storage.UpdateDB(c.ZetDir)
+		s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
 		if err != nil {
 			return fmt.Errorf("Error syncing database and flat files: %v", err)
 		}
@@ -582,24 +582,24 @@ func ListCmd(args []string) error {
 	var err error
 	switch n {
 	case 2: // no args
-		zettels, err = meta.List(c.ZetDir, `dir_name ASC`)
+		zettels, err = meta.List(c.ZetDir, c.DBPath, `dir_name ASC`)
 		if err != nil {
 			return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 		}
 	case 3: // one arg
 		switch strings.ToLower(args[2]) {
 		case `recent`:
-			zettels, err = meta.List(c.ZetDir, `mtime ASC`)
+			zettels, err = meta.List(c.ZetDir, c.DBPath, `mtime ASC`)
 			if err != nil {
 				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 			}
 		case `alpha`:
-			zettels, err = meta.List(c.ZetDir, `title ASC`)
+			zettels, err = meta.List(c.ZetDir, c.DBPath, `title ASC`)
 			if err != nil {
 				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 			}
 		case `length`:
-			zettels, err = meta.List(c.ZetDir, `LENGTH(body) ASC`)
+			zettels, err = meta.List(c.ZetDir, c.DBPath, `LENGTH(body) ASC`)
 			if err != nil {
 				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 			}

@@ -16,6 +16,7 @@ type C struct {
 	ConfDir string `yaml:"conf_dir"` // os.UserConfigDir
 	File    string `yaml:"file"`     // config.yaml
 	Editor  string `yaml:"editor"`   // user's preferred editor
+	DBPath  string `yaml:"db_path"`  // path to database
 
 	ZetDir string `yaml:"zet_dir"` // directory where zet resides
 }
@@ -43,11 +44,19 @@ func (c *C) Init() error {
 		return fmt.Errorf("Couldn't resolve user config directory: %v", err)
 	}
 
+	// Find path to database. Path to zettelkasten directory is the
+	// default directory.
+	dbPath, err := dbPath()
+	if err != nil {
+		c.DBPath = filepath.Join(p, `data.db`)
+	}
+
 	c.ZetDir = p
 	c.ConfDir = d
 	c.Id = `zet`
 	c.File = `config.yaml`
 	c.Editor = e
+	c.DBPath = dbPath
 
 	return nil
 }
@@ -99,6 +108,14 @@ func isDir(path string) (bool, error) {
 		return false, err
 	}
 	return info.IsDir(), nil
+}
+
+func dbPath() (string, error) {
+	dbPath := os.Getenv("ZET_DB_PATH")
+	if dbPath == "" {
+		return "", errors.New("environment variable ZET_DB_PATH must be set")
+	}
+	return dbPath, nil
 }
 
 // preferredEditor returns the user's preferred editor based the priority:

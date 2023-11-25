@@ -5,7 +5,6 @@ package storage
 import (
 	"bufio"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -224,8 +223,8 @@ func zettelLinks(db *sqlx.DB, z *Zettel) error {
 // UpdateDB initializes the database, retrieve zet state from the
 // database, and updates the database to sync the flat files and the
 // data storage.
-func UpdateDB(zetPath string) (*Storage, error) {
-	s, err := Init()
+func UpdateDB(zetPath, dbPath string) (*Storage, error) {
+	s, err := Init(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize database: %v.\n", err)
 	}
@@ -249,11 +248,7 @@ func UpdateDB(zetPath string) (*Storage, error) {
 
 // Init creates the database if it doesn't exist and returns the
 // database connection.
-func Init() (*Storage, error) {
-	dbPath := os.Getenv("ZET_DB_PATH")
-	if dbPath == "" {
-		return nil, errors.New("environment variable ZET_DB_PATH must be set")
-	}
+func Init(dbPath string) (*Storage, error) {
 	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to database: %v", err)
