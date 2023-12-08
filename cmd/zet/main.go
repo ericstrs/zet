@@ -38,13 +38,13 @@ const usage = `USAGE
 
 COMMANDS
 
-	add     - Adds a new zettel with the given title and content.
+	add, a  - Adds a new zettel with the given title and content.
 	search  - Searches for zettels given a query string.
 	split   - Splits up a given zettel into sub-zettels.
 	content - Prints different sections of zettel content.
 	merge   - Merges linked notes to form a single note.
 	list    - Lists all existing zettels.
-	link    - Prints the link of a zettel.
+	link, l - Prints the link of a zettel.
 	isosec  - Prints the current ISO date to the millisecond.
 	commit  - Performs a git commit using zettel's title.
 	config  - Displays configuration directory path.
@@ -73,7 +73,7 @@ func Run() error {
 		if err := ui.AddCmd(args); err != nil {
 			return fmt.Errorf("Failed to add a zettel: %v", err)
 		}
-	case `link`: // get zettel link
+	case `link`, `l`: // get zettel link
 		if err := ui.LinkCmd(args); err != nil {
 			return fmt.Errorf("Failed to retrieve zettel link: %v", err)
 		}
