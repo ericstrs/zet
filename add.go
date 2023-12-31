@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/iuiq/zet/internal/meta"
+	"github.com/justericg/zet/internal/meta"
 )
 
 var Perm = 0700

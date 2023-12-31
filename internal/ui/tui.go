@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/iuiq/zet"
-	"github.com/iuiq/zet/internal/meta"
-	"github.com/iuiq/zet/internal/storage"
+	"github.com/justericg/zet"
+	"github.com/justericg/zet/internal/meta"
+	"github.com/justericg/zet/internal/storage"
 	"github.com/rivo/tview"
 )
 

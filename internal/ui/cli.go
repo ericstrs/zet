@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/iuiq/zet"
-	"github.com/iuiq/zet/internal/config"
-	"github.com/iuiq/zet/internal/meta"
-	"github.com/iuiq/zet/internal/storage"
+	"github.com/justericg/zet"
+	"github.com/justericg/zet/internal/config"
+	"github.com/justericg/zet/internal/meta"
+	"github.com/justericg/zet/internal/storage"
 )
 
 const (

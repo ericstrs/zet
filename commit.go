@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/iuiq/zet/internal/meta"
+	"github.com/justericg/zet/internal/meta"
 )
 
 // CommitBulk commits a bulk of files given a list of paths to the

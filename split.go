@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/iuiq/zet/internal/meta"
-	"github.com/iuiq/zet/internal/storage"
+	"github.com/justericg/zet/internal/meta"
+	"github.com/justericg/zet/internal/storage"
 )
 
 // SplitZettel splits zettel content from stdin into sub-zettels.
