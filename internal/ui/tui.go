@@ -241,7 +241,6 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 //   - H: Move to the top of the visible window.
 //   - M: Move to the center of the visible window.
 //   - L: Move to bottom of the visible window.
-//   - ESC, q: Exits the search interface.
 //   - space: Page down
 //   - b: Page up
 //   - ESC, q: Exits the search interface.
