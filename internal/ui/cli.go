@@ -25,8 +25,8 @@ const (
 
 USAGE
 
-  zet search query|q [term]  - Print zettels given a search term.
-  zet search browse|b [term] - Interactively search for a zettel.
+  zet search query|q <term>  - Print zettels given a search term.
+  zet search browse|b <term> - Interactively search for a zettel.
   zet search help            - Print zettels given a search term.
 `
 	splitUsage = `NAME
@@ -36,7 +36,7 @@ USAGE
 USAGE
 
   zet split          - Splits zettel content from stdin into sub-zettels.
-  zet split [isosec] - Splits zettel content from README.md in isosec directory into sub-zettels.`
+  zet split <isosec> - Splits zettel content from README.md in isosec directory into sub-zettels.`
 	contentUsage = `NAME
 
   content - prints different sections of zettel content.
@@ -54,7 +54,7 @@ USAGE
 
 USAGE
 
-  zet merge [isosec] - Merges contents of split linked zettel's at given isosec directory or using stdin.
+  zet merge <isosec> - Merges contents of split linked zettel's at given isosec directory or using stdin.
 
 DESCRIPTION
 
@@ -115,7 +115,7 @@ DESCRIPTION
 USAGE:
 
   zet link          - Prints zettel link for the current dir.
-  zet link [isosec] - Prints zettel link for the given dir isosec.
+  zet link <isosec> - Prints zettel link for the given dir isosec.
   zet link help     - Provides command information.
 `
 	isoUsage = `NAME
@@ -134,8 +134,8 @@ USAGE:
   USAGE
 
     zet add|a                - Adds new zettel and opens for editing.
-    zet add|a [title]        - Adds new zettel with provided title.
-    zet add|a [title] [body] - Adds new zettel with provided title and body.
+    zet add|a <title>        - Adds new zettel with provided title.
+    zet add|a <title> <body> - Adds new zettel with provided title and body.
     zet add|a help           - Provides command information.
 
   DESCRIPTION
@@ -144,9 +144,9 @@ USAGE:
     Stdin is always appended after any argument data. Providing non-empty
     Stdin alongside ` + "`zet add`" + ` disables the interactive feature.
 
-    Auto-linking is enabled by default. If calling the add command from
-    an existing zettel directory, the newly created zettel will have link
-    to existing zettel.
+    Auto-linking is enabled by default. That is, if you are calling the
+		add command from an existing zettel directory, the newly created zettel
+		will have link to existing zettel.
 `
 	commitUsage = `NAME
 
