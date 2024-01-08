@@ -2,6 +2,8 @@
 
 zet is a command-line tool to organize and manage knowledge.
 
+https://github.com/justericg/zet/assets/98285990/8fdcb3f4-278d-47b4-8f09-cb8ef17356c1
+
 ## Features
 
 * TUI FTS search.
