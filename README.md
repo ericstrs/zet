@@ -1,6 +1,6 @@
 # zet
 
-zet is a cli tool to organize and manage knowledge.
+zet is a command-line tool to organize and manage knowledge.
 
 ## Features
 
