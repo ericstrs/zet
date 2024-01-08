@@ -556,6 +556,7 @@ func ConfigCmd(args []string) error {
 
 	if n == 2 {
 		fmt.Printf("ZET_DIR=%s\n", c.ZetDir)
+		fmt.Printf("ZET_DB_PATH=%s\n", c.DBPath)
 		fmt.Printf("EDITOR=%s\n", c.Editor)
 		return nil
 	}
