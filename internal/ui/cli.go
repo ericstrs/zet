@@ -162,9 +162,11 @@ USAGE:
 
 func SearchCmd(args []string) error {
 	c := new(config.C)
+
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
+
 	s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
 	if err != nil {
 		return fmt.Errorf("Error syncing database and flat files: %v", err)
@@ -173,7 +175,7 @@ func SearchCmd(args []string) error {
 	n := len(args)
 
 	if n < 3 {
-		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
+		fmt.Fprintln(os.Stderr, "ERROR: Not enough arguments.")
 		fmt.Fprintf(os.Stderr, searchUsage)
 		os.Exit(1)
 	}
