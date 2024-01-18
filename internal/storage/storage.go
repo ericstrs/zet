@@ -224,11 +224,15 @@ func zettelLinks(db *sqlx.DB, z *Zettel) error {
 // database, and updates the database to sync the flat files and the
 // data storage.
 func UpdateDB(zetPath, dbPath string) (*Storage, error) {
-	s, err := Init(dbPath)
+	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize database: %v.\n", err)
+		return nil, fmt.Errorf("Failed to connect to database: %v", err)
 	}
-	db := s.db
+
+	s, err := NewStorage(db)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to setup database: %v", err)
+	}
 
 	zm, err := s.zettelsMap()
 	if err != nil {
@@ -246,17 +250,14 @@ func UpdateDB(zetPath, dbPath string) (*Storage, error) {
 	return s, tx.Commit()
 }
 
-// Init creates the database if it doesn't exist and returns the
+// NewStorage creates and returns a new Storage instance with a given
 // database connection.
-func Init(dbPath string) (*Storage, error) {
-	db, err := sqlx.Connect("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to database: %v", err)
-	}
+func NewStorage(db *sqlx.DB) (*Storage, error) {
+	var err error
 	if _, err = db.Exec(tablesSQL); err != nil {
 		return nil, err
 	}
-	return &Storage{db: db}, nil
+	return &Storage{db: db}, err
 }
 
 // Close closes th database connection.
