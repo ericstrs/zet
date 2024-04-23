@@ -2,12 +2,12 @@
 
 zet is a command-line tool to organize and manage knowledge.
 
-https://github.com/justericg/zet/assets/98285990/8fdcb3f4-278d-47b4-8f09-cb8ef17356c1
+https://github.com/ericstrs/zet/assets/98285990/8fdcb3f4-278d-47b4-8f09-cb8ef17356c1
 
 ## Features
 
-* TUI FTS search.
 * Quickly create and link zettels.
+* TUI FTS search.
 * Split up a given zettel into separate zettels.
 * Merge zettels by replacing zettels links with the referenced zettel's content.
 
@@ -16,7 +16,7 @@ https://github.com/justericg/zet/assets/98285990/8fdcb3f4-278d-47b4-8f09-cb8ef17
 The command can be built from source or directly installed:
 
 ```
-go install github.com/justericg/zet/cmd/zet@latest
+go install github.com/ericstrs/zet/cmd/zet@latest
 ```
 
 ## Documentation

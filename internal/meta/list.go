@@ -3,7 +3,7 @@ package meta
 import (
 	"fmt"
 
-	"github.com/justericg/zet/internal/storage"
+	"github.com/ericstrs/zet/internal/storage"
 )
 
 // List retrieves a list of zettels. It synchronizes the database and

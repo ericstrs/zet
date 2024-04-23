@@ -1,4 +1,4 @@
-module github.com/justericg/zet
+module github.com/ericstrs/zet
 
 go 1.21.0
 

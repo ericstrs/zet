@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ericstrs/zet"
+	"github.com/ericstrs/zet/internal/meta"
+	"github.com/ericstrs/zet/internal/storage"
 	"github.com/gdamore/tcell/v2"
-	"github.com/justericg/zet"
-	"github.com/justericg/zet/internal/meta"
-	"github.com/justericg/zet/internal/storage"
 	"github.com/rivo/tview"
 )
 

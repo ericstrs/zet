@@ -29,7 +29,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/justericg/zet/internal/ui"
+	"github.com/ericstrs/zet/internal/ui"
 )
 
 const usage = `USAGE
