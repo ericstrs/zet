@@ -49,7 +49,14 @@ COMMANDS
 	commit  - Performs a git commit using zettel's title.
 	config  - Displays configuration directory path.
 
-Appending "help" after any command will print more command info.
+DESCRIPTION
+
+	Zet is a command-line utility for managing a Zettelkasten.
+  It employs a command-line interface (CLI) for core and batch features
+  and a text-based user interface (TUI) for searching and visualization
+	functionalities.
+
+  Appending "help" after any command will print more command info.
 `
 
 func main() {
