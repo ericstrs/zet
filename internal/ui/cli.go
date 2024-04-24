@@ -36,17 +36,22 @@ USAGE
 USAGE
 
   zet split          - Splits zettel content from stdin into sub-zettels.
-  zet split <isosec> - Splits zettel content from README.md in isosec directory into sub-zettels.`
+  zet split <isosec> - Splits zettel content from README.md in isosec
+                       directory into sub-zettels.`
 	contentUsage = `NAME
 
   content - prints different sections of zettel content.
 
 USAGE
 
-  zet content title - Prints title from README.md in current directory or in given directory.
-  zet content body  - Prints body from README.md in current directory or in given directory.
-  zet content links - Prints links from README.md in current directory or in given directory.
-  zet content tags  - Prints tags from README.md in current directory or in given directory.
+  zet content title - Prints title from README.md in current directory
+                      or in given directory.
+  zet content body  - Prints body from README.md in current directory or
+                      in given directory.
+  zet content links - Prints links from README.md in current directory
+                      or in given directory.
+  zet content tags  - Prints tags from README.md in current directory or
+                      in given directory.
 `
 	mergeUsage = `NAME
 
@@ -54,7 +59,8 @@ USAGE
 
 USAGE
 
-  zet merge <isosec> - Merges contents of split linked zettel's at given isosec directory or using stdin.
+  zet merge <isosec> - Merges contents of split linked zettel's at given
+                       isosec directory or using stdin.
 
 DESCRIPTION
 
