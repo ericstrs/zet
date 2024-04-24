@@ -6,10 +6,10 @@ https://github.com/ericstrs/zet/assets/98285990/8fdcb3f4-278d-47b4-8f09-cb8ef173
 
 ## Features
 
-* Quickly create and link zettels.
-* TUI FTS search.
-* Split up a given zettel into separate zettels.
-* Merge zettels by replacing zettels links with the referenced zettel's content.
+* Quick zettel (individual note) creation and linking.
+* TUI Full Text Search (FTS) for zettels.
+* Split a given zettel into separate zettels.
+* Merge zettels by replacing zettel links with the referenced content.
 
 ## Install
 
@@ -21,7 +21,7 @@ go install github.com/ericstrs/zet/cmd/zet@latest
 
 ## Documentation
 
-Usage, controls, and other documentation has been embedded into the source code. See the source or run the  application with the `help` command.
+Usage, controls, and other documentation has been embedded into the source code. See the source or run the application with the `help` command.
 
 Global:
 
@@ -47,7 +47,7 @@ Results list:
 |<kbd>b</kbd>|Page up|
 |<kbd>ESC, q</kbd>|Exists the search interface|
 
-FTS search filters:
+FTS filters:
 
 * `title: <term>` or `t: <term>`
 * `body: <term>` or `b: <term>`
