@@ -13,8 +13,10 @@ import (
 	"github.com/ericstrs/zet/internal/meta"
 )
 
-var Perm = 0700
-var errNotInZettel = errors.New("not in a zettel")
+var (
+	Perm           = 0700
+	errNotInZettel = errors.New("not in a zettel")
+)
 
 // CreateAdd creates a new directory with a unique identifier and then
 // creates a new file.
