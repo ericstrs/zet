@@ -43,6 +43,7 @@ Results list:
 |<kbd>H</kbd>|Move to the top of the visible window|
 |<kbd>M</kbd>|Move to the middle of the visible window|
 |<kbd>L</kbd>|Move to the bottom of the visible window|
+|<kbd>c</kbd>|Open selected zettel in new tmux window|
 |<kbd>space</kbd>|Page down|
 |<kbd>b</kbd>|Page up|
 |<kbd>ESC, q</kbd>|Exists the search interface|
