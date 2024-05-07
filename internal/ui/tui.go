@@ -241,6 +241,7 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 //   - H: Move to the top of the visible window.
 //   - M: Move to the center of the visible window.
 //   - L: Move to bottom of the visible window.
+//   - c: Open selected zettel in a newly created tmux window.
 //   - space: Page down
 //   - b: Page up
 //   - ESC, q: Exits the search interface.
@@ -290,6 +291,39 @@ func (sui *SearchUI) listInput(zetDir, editor string) {
 				_, _, _, height := sui.list.GetInnerRect()
 				sui.list.Select(row+height-1, 0)
 				return nil
+			case 'c': // open selected zettel in new tmux window
+				// check if tmux is available
+				_, err := exec.LookPath("tmux")
+				if err != nil {
+					return nil
+				}
+
+				// check if the current process is running a tmux session
+				_, inSession := os.LookupEnv("TMUX")
+				if !inSession {
+					return nil
+				}
+
+				row, col := sui.list.GetSelection()
+				cell := sui.list.GetCell(row, col)
+				switch z := cell.GetReference().(type) {
+				case *storage.ResultZettel:
+					fz := filepath.Join(zetDir, z.DirName)
+					fp := filepath.Join(fz, z.Name)
+					err := runCmd(fz, "tmux", "new-window", "-d", fmt.Sprintf("$SHELL -c '%s %s && $SHELL'", editor, fp))
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Failed to create new tmux window and open zettel: %v", err)
+					}
+				case *storage.Zettel:
+					fz := filepath.Join(zetDir, z.DirName)
+					fp := filepath.Join(fz, z.Name)
+					err := runCmd(fz, "tmux", "new-window", "-d", fmt.Sprintf("$SHELL -c '%s %s && $SHELL'", editor, fp))
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Failed to create new tmux window and open zettel: %v", err)
+					}
+				default:
+					log.Printf("Table cell doesn't reference storage.ResultZettel or storage.Zettel: %T\n", z)
+				}
 			case 'b': // page up (Ctrl-B)
 				return tcell.NewEventKey(tcell.KeyCtrlB, 0, tcell.ModNone)
 			case ' ': // page down
