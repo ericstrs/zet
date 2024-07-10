@@ -18,6 +18,7 @@ Commands:
 	isosec  - Prints the current ISO date to the millisecond.
 	commit  - Performs a git commit using zettel's title.
 	config  - Displays configuration directory path.
+	related - Prints related zettel links for a given zettel.
 
 Appending "help" after any command will print command info.
 */
@@ -48,6 +49,7 @@ COMMANDS
 	isosec  - Prints the current ISO date to the millisecond.
 	commit  - Performs a git commit using zettel's title.
 	config  - Displays configuration directory path.
+	related - Prints related zettel links for a given zettel.
 
 DESCRIPTION
 
@@ -113,6 +115,10 @@ func Run() error {
 	case `config`:
 		if err := ui.ConfigCmd(args); err != nil {
 			return fmt.Errorf("Error getting config: %v", err)
+		}
+	case `related`:
+		if err := ui.RelatedCmd(args); err != nil {
+			return fmt.Errorf("Failed to retrieve related zettels: %v", err)
 		}
 	case `help`:
 		fmt.Printf(usage)

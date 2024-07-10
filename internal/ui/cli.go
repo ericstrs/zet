@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/blevesearch/bleve/v2"
 	"github.com/ericstrs/zet"
 	"github.com/ericstrs/zet/internal/config"
 	"github.com/ericstrs/zet/internal/meta"
@@ -163,6 +164,23 @@ USAGE:
     zet commit      - Commits the README.md file in current directory.
     zet commit all  - Commits all modified/new README.md files.
     zet commit help - Provides command information.
+`
+	relatedUsage = `NAME
+
+    related - returns related zettels to a given zettel.
+
+  USAGE
+
+    zet related create    - Creates index and indexes all zettels.
+		zet related           - Find related zettels for the zettel content
+		                        provided by stdin.
+    zet related <content> - Find related zettels for the zettel content
+		                        provide by the argument.
+
+	DESCRIPTION
+
+		This command expects the zettel content to be passed in either through
+		standard input or in an argument.
 `
 )
 
@@ -785,6 +803,80 @@ func CommitCmd(args []string) error {
 			fmt.Fprintln(os.Stderr, "Error: incorrect sub-command.")
 			fmt.Fprintf(os.Stderr, commitUsage)
 			os.Exit(1)
+		}
+	}
+
+	return nil
+}
+
+func RelatedCmd(args []string) error {
+	c := new(config.C)
+	if err := c.Init(); err != nil {
+		return fmt.Errorf("Failed to initialize configuration file: %v", err)
+	}
+	n := len(args)
+
+	if n < 2 {
+		fmt.Fprintln(os.Stderr, "Error: Not enough arguments.")
+		fmt.Fprintf(os.Stderr, relatedUsage)
+		os.Exit(1)
+	}
+
+	arg := ""
+	if n > 2 {
+		arg = args[2]
+	}
+
+	switch strings.ToLower(arg) {
+	case `create`:
+		bp := filepath.Join(c.ZetDir, "zet.bleve")
+		index, err := zet.CreateIndex(bp)
+		if err != nil {
+			return err
+		}
+
+		// Get all zettels
+		zettels, err := meta.List(c.ZetDir, c.DBPath, `dir_name ASC`)
+		if err != nil {
+			return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+		}
+
+		if err := zet.IndexZettels(index, zettels); err != nil {
+			return err
+		}
+	case `help`:
+		fmt.Printf(relatedUsage)
+	default: // user entered isosec
+		// Set zettel content to stdin. If no stdin, fallback on passed in
+		// argument.
+		content, err := getStdin()
+		if err != nil {
+			return fmt.Errorf("Error getting standard input: %v", err)
+		}
+		if content == "" {
+			if arg == "" {
+				return fmt.Errorf("must provide zettel content either through stdin or an argument")
+			}
+			content = args[2]
+		}
+
+		bp := filepath.Join(c.ZetDir, "zet.bleve")
+		index, err := bleve.Open(bp)
+		if err != nil {
+			return fmt.Errorf("error opening bleve index: %v\n", err)
+		}
+		zids, err := zet.RelatedZettels(index, content, 10)
+		if err != nil {
+			return err
+		}
+
+		for _, id := range zids {
+			p := filepath.Join(c.ZetDir, id)
+			l, err := meta.Link(p)
+			if err != nil {
+				return err
+			}
+			fmt.Println(l)
 		}
 	}
 
