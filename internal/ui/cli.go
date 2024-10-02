@@ -56,7 +56,7 @@ USAGE
 `
 	mergeUsage = `NAME
 
-  merge - Merges the contents of split zettel's into single body of text.
+  merge - Merges prints the contents of split zettel's into single body of text.
 
 USAGE
 
@@ -123,6 +123,7 @@ USAGE:
 
   zet link          - Prints zettel link for the current dir.
   zet link <isosec> - Prints zettel link for the given dir isosec.
+  zet link annotate - Prints zettel content with annotated links.
   zet link help     - Provides command information.
 `
 	isoUsage = `NAME
@@ -182,11 +183,27 @@ USAGE:
 		This command expects the zettel content to be passed in either through
 		standard input or in an argument.
 `
+	annotateUsage = `NAME
+
+  annotate - annotates zettel links
+
+USAGE
+
+  zet link annotate      - Annotates zettel links with a reason why someone
+	                       should follow the link to the referenced content.
+  zet link annotate help - Provides command information.
+
+DESCRIPTION
+
+  Example usage:
+
+  Print a zettel with all links being annotated:
+
+  ` + "`" + `$zet link annotate < README.md` + "`" + ``
 )
 
 func SearchCmd(args []string) error {
 	c := new(config.C)
-
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
@@ -654,6 +671,13 @@ func LinkCmd(args []string) error {
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
+
+	s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
+	if err != nil {
+		return fmt.Errorf("Error syncing database and flat files: %v", err)
+	}
+	defer s.Close()
+
 	n := len(args)
 
 	switch n {
@@ -663,18 +687,30 @@ func LinkCmd(args []string) error {
 			return err
 		}
 	case 3: // one arg, use c.ZetDir/arg as path
-		if strings.ToLower(args[2]) == `help` {
+		switch strings.ToLower(args[2]) {
+		case `annotate`, `a`:
+			content, err := getStdin()
+			if err != nil {
+				return fmt.Errorf("Error getting standard input: %v", err)
+			}
+			links, err := zet.AnnotateLink(s, c.ZetDir, c.DBPath, content)
+			if err != nil {
+				return fmt.Errorf("Error getting standard input: %v", err)
+			}
+			for _, link := range links {
+				fmt.Println(link)
+			}
+		case `help`:
 			fmt.Printf(linkUsage)
-			return nil
-		}
-		p := filepath.Join(c.ZetDir, args[2])
-		l, err = meta.Link(p)
-		if err != nil {
-			return err
+		default:
+			p := filepath.Join(c.ZetDir, args[2])
+			l, err = meta.Link(p)
+			if err != nil {
+				return err
+			}
+			fmt.Println(l)
 		}
 	}
-
-	fmt.Println(l)
 	return nil
 }
 

@@ -19,7 +19,7 @@ import (
 )
 
 type Storage struct {
-	db *sqlx.DB
+	DB *sqlx.DB
 }
 
 type dir struct {
@@ -73,7 +73,7 @@ type Link struct {
 }
 
 func (s *Storage) GetDB() *sqlx.DB {
-	return s.db
+	return s.DB
 }
 
 // AllZettels returns all existing zettel files with optional sorting.
@@ -85,15 +85,15 @@ func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
 		query = fmt.Sprintf("%s ORDER BY %s", query, sort)
 	}
 
-	if err := s.db.Select(&zettels, query); err != nil {
+	if err := s.DB.Select(&zettels, query); err != nil {
 		return nil, fmt.Errorf("Error getting zettels records: %v", err)
 	}
 	// Fetch tags and links for this zettel
 	for _, z := range zettels {
-		if err := zettelTags(s.db, &z); err != nil {
+		if err := zettelTags(s.DB, &z); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
-		if err := zettelLinks(s.db, &z); err != nil {
+		if err := zettelLinks(s.DB, &z); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
 	}
@@ -135,16 +135,16 @@ func (s *Storage) SearchZettels(term, before, after string) ([]ResultZettel, err
 					ORDER BY bm25(zettel_fts, 1.5, 1.0, 1.5);
 			`
 
-	if err := s.db.Select(&results, query, strings.ToLower(term)); err != nil {
+	if err := s.DB.Select(&results, query, strings.ToLower(term)); err != nil {
 		return nil, err
 	}
 
 	for i := range results {
 		z := &results[i]
-		if err := zettelTags(s.db, &z.Zettel); err != nil {
+		if err := zettelTags(s.DB, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting tags: %v", err)
 		}
-		if err := zettelLinks(s.db, &z.Zettel); err != nil {
+		if err := zettelLinks(s.DB, &z.Zettel); err != nil {
 			return nil, fmt.Errorf("Error getting links: %v", err)
 		}
 		z.BodySnippet = createSnippets(z.BodySnippet, before, after)
@@ -257,12 +257,12 @@ func NewStorage(db *sqlx.DB) (*Storage, error) {
 	if _, err = db.Exec(tablesSQL); err != nil {
 		return nil, err
 	}
-	return &Storage{db: db}, err
+	return &Storage{DB: db}, err
 }
 
 // Close closes th database connection.
 func (s *Storage) Close() {
-	s.db.Close()
+	s.DB.Close()
 }
 
 // zettelsMap retrieves all existing zettels from the database
@@ -928,7 +928,7 @@ func isoToTime(t string) (time.Time, error) {
 // Merge fetches and merges the content of each linked zettel, creating
 // a single body of text.
 func (s *Storage) Merge(rootContent string) (string, error) {
-	tx, err := s.db.Beginx()
+	tx, err := s.DB.Beginx()
 	if err != nil {
 		return "", fmt.Errorf("Failed to create transaction: %v\n", err)
 	}
@@ -963,7 +963,7 @@ func (s *Storage) Merge(rootContent string) (string, error) {
 			}
 
 			// Get zettel that the link points to.
-			z, err := GetZettel(s.db, id)
+			z, err := GetZettel(s.DB, id)
 			if err != nil {
 				return "", fmt.Errorf("Error retrieving sub-zettel: %v", err)
 			}

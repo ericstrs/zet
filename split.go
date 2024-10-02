@@ -11,7 +11,7 @@ import (
 	"github.com/ericstrs/zet/internal/storage"
 )
 
-// SplitZettel splits zettel content from stdin into sub-zettels.
+// SplitZettel splits given zettel content into sub-zettels.
 func SplitZettel(zetDir, zettelDir, b string) error {
 	if b == "" {
 		return errors.New("zettel content is empty")

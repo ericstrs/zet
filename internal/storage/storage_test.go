@@ -32,7 +32,7 @@ func getTestTransaction() (*sqlx.Tx, error) {
 	// Use an in-memory SQLite database for tests
 	db, err := sqlx.Connect("sqlite", ":memory:")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to mock database: %v\n", err)
 	}
 	// Setup the test database
 	err = setupTestDB(db)
