@@ -116,7 +116,7 @@ func Run() error {
 		if err := ui.ConfigCmd(args); err != nil {
 			return fmt.Errorf("Error getting config: %v", err)
 		}
-	case `related`:
+	case `related`, `rel`:
 		if err := ui.RelatedCmd(args); err != nil {
 			return fmt.Errorf("Failed to retrieve related zettels: %v", err)
 		}
