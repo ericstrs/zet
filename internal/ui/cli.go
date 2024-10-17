@@ -686,6 +686,7 @@ func LinkCmd(args []string) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println(l)
 	case 3: // one arg, use c.ZetDir/arg as path
 		switch strings.ToLower(args[2]) {
 		case `annotate`, `a`:
