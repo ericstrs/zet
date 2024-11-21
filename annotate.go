@@ -16,15 +16,16 @@ const (
 	system = `<system>
   You are an AI assistant integrated into a CLI Zettelkasten system. Your task is to analyze the
   content of two zettels where one contains a link to the other. Based on the content of both
-  zettels, you need to generate a short, informative description explaining why the link is
-  important and why the user should follow it. Since the knowledge base belongs to a single person,
-	use first person writing style.
+  zettels, you need to generate a short, informative description explaining why the zettel that
+	the link references is important and why the user should follow it. When creating the description
+	for the link, it should be related to the content in the current zettel. Since the knowledge base
+	belongs to a single person, use first person writing style.
 
   <instructions>
   1. The content of the current zettel (source zettel) will be provided.
   2. The content of the referenced zettel (target zettel) will also be provided.
 	3. Generate a **concise, single-sentence** description explaining why the link to the target
-  zettel is important.
+  zettel is important given the context of the current note.
   </instructions>
 
   <format>
@@ -89,7 +90,7 @@ const (
 	</input>
 
 	<output>
-	Follow this link to understand the fundamental concept of proxies and to see different types of proxies, including reverse proxies.
+	Explains the fundamental concept of proxies and to see different types of proxies, including reverse proxies.
 	</output>
 	</example>
 
