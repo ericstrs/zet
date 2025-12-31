@@ -105,31 +105,44 @@ USAGE
 
 USAGE
 
-  zet list|ls          - Prints all zettels to stdout sorted by creation date.
-  zet list|ls recent   - Prints all zettels sorted by modification time.
-  zet list|ls length   - Prints all zettels sorted by word count.
-  zet list|ls alpha    - Prints all zettels by alphabetically sorted titles.
-  zet list|ls help     - Provides command information.
+  zet list|ls               - Prints all zettels to stdout sorted by creation date.
+  zet list|ls modified [-d] - Prints all zettels sorted by modification time.
+  zet list|ls length        - Prints all zettels sorted by word count.
+  zet list|ls alpha         - Prints all zettels by alphabetically sorted titles.
+  zet list|ls help          - Provides command information.
+
+FLAGS
+
+  -d  Descending order (most recent first). Applies to modified and its subcommands.
 
 SUBCOMMANDS
+
+  Temporal subcommands filter by creation date:
 
   day [YYYY-MM-DD] [-N] [-N:]   - Print daily view. -N for N days ago, -N: for range.
   week [YYYY-MM-DD] [-N] [-N:]  - Print weekly view. -N for N weeks ago, -N: for range.
   month [YYYY-MM] [-N] [-N:]    - Print monthly view. -N for N months ago, -N: for range.
   year [YYYY] [-N] [-N:]        - Print yearly view. -N for N years ago, -N: for range.
 
+  Temporal subcommands under modified filter by modification time:
+
+  modified day [YYYY-MM-DD] [-N] [-N:]   - Zettels modified on day.
+  modified week [YYYY-MM-DD] [-N] [-N:]  - Zettels modified in week.
+  modified month [YYYY-MM] [-N] [-N:]    - Zettels modified in month.
+  modified year [YYYY] [-N] [-N:]        - Zettels modified in year.
+
 EXAMPLES
 
-  zet list day              - Show today's zettels.
-  zet list day 2024-12-25   - Show zettels from Dec 25, 2024.
-  zet list day -3           - Show zettels from 3 days ago.
-  zet list day -3:          - Show zettels from 3 days ago to today.
-  zet list week             - Show this week's zettels.
-  zet list week -2          - Show zettels from 2 weeks ago.
-  zet list month            - Show this month's zettels.
-  zet list month 2024-06    - Show zettels from June 2024.
-  zet list year             - Show this year's zettels.
-  zet list year -1:         - Show zettels from last year to now.
+  zet list day              - Show zettels created today.
+  zet list day 2024-12-25   - Show zettels created on Dec 25, 2024.
+  zet list day -3           - Show zettels created 3 days ago.
+  zet list day -3:          - Show zettels created from 3 days ago to today.
+  zet list week             - Show zettels created this week.
+  zet list modified         - Show all zettels sorted by modification time.
+  zet list modified -d      - Show all zettels, most recently modified first.
+  zet list modified day     - Show zettels modified today.
+  zet list modified day -3  - Show zettels modified 3 days ago.
+  zet list modified week -d - Show zettels modified this week, most recent first.
 
 DESCRIPTION
 
@@ -656,10 +669,10 @@ func ListCmd(args []string) error {
 	} else if n >= 3 {
 		subcmd := strings.ToLower(args[2])
 		switch subcmd {
-		case `recent`:
-			zettels, err = meta.List(c.ZetDir, c.DBPath, `mtime ASC`)
+		case `modified`, `recent`:
+			zettels, err = handleModifiedCmd(c, args[3:])
 			if err != nil {
-				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+				return err
 			}
 		case `alpha`:
 			zettels, err = meta.List(c.ZetDir, c.DBPath, `title ASC`)
@@ -693,6 +706,45 @@ func ListCmd(args []string) error {
 		fmt.Println(yellow + z.DirName + reset + " " + z.Title)
 	}
 	return nil
+}
+
+// handleModifiedCmd handles the "modified" subcommand which can:
+// - List all zettels sorted by mtime: zet list modified [-d]
+// - Filter by temporal period: zet list modified day|week|month|year [-d] [date] [-N] [-N:]
+func handleModifiedCmd(c *config.C, args []string) ([]storage.Zettel, error) {
+	// Parse -d flag and separate from other args
+	desc := false
+	var remainingArgs []string
+	for _, arg := range args {
+		if arg == "-d" {
+			desc = true
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
+	}
+
+	sortOrder := "ASC"
+	if desc {
+		sortOrder = "DESC"
+	}
+
+	// No subcommand - list all zettels sorted by mtime
+	if len(remainingArgs) == 0 {
+		return meta.List(c.ZetDir, c.DBPath, fmt.Sprintf("mtime %s", sortOrder))
+	}
+
+	// Check for temporal subcommand
+	subcmd := strings.ToLower(remainingArgs[0])
+	switch subcmd {
+	case `day`, `week`, `month`, `year`:
+		start, end, err := parseDateArgs(subcmd, remainingArgs[1:])
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse date arguments: %v", err)
+		}
+		return meta.ListByMtimeRange(c.ZetDir, c.DBPath, start, end, sortOrder)
+	default:
+		return nil, fmt.Errorf("unknown modified subcommand: %s", subcmd)
+	}
 }
 
 // parseDateArgs parses date arguments for day/week/month/year subcommands.

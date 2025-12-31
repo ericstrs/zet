@@ -35,3 +35,19 @@ func ListByDateRange(zetPath, dbPath, startDate, endDate string) ([]storage.Zett
 	}
 	return zettels, nil
 }
+
+// ListByMtimeRange retrieves zettels within a modification time range.
+// startDate and endDate should be in YYYYMMDD format.
+// sort should be "ASC" or "DESC".
+func ListByMtimeRange(zetPath, dbPath, startDate, endDate, sort string) ([]storage.Zettel, error) {
+	s, err := storage.UpdateDB(zetPath, dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to sync database: %v", err)
+	}
+	defer s.Close()
+	zettels, err := s.ZettelsByMtimeRange(startDate, endDate, sort)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting zettels by mtime range: %v", err)
+	}
+	return zettels, nil
+}

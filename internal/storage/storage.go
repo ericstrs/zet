@@ -100,6 +100,33 @@ func (s *Storage) ZettelsByDateRange(startDate, endDate string) ([]Zettel, error
 	return zettels, nil
 }
 
+// ZettelsByMtimeRange returns zettels within a date range based on mtime (modification time).
+// startDate and endDate should be in YYYYMMDD format.
+// The sort parameter should be "ASC" or "DESC".
+func (s *Storage) ZettelsByMtimeRange(startDate, endDate, sort string) ([]Zettel, error) {
+	zettels := []Zettel{}
+	// Convert YYYYMMDD to RFC3339 format for comparison
+	// Start of day: YYYY-MM-DDT00:00:00Z
+	// End of day: YYYY-MM-DDT23:59:59Z
+	startRFC := fmt.Sprintf("%s-%s-%sT00:00:00Z", startDate[:4], startDate[4:6], startDate[6:8])
+	endRFC := fmt.Sprintf("%s-%s-%sT23:59:59Z", endDate[:4], endDate[4:6], endDate[6:8])
+
+	query := fmt.Sprintf(`SELECT * FROM zettel WHERE mtime >= $1 AND mtime <= $2 ORDER BY mtime %s`, sort)
+	if err := s.DB.Select(&zettels, query, startRFC, endRFC); err != nil {
+		return nil, fmt.Errorf("Error getting zettels by mtime range: %v", err)
+	}
+
+	for i := range zettels {
+		if err := zettelTags(s.DB, &zettels[i]); err != nil {
+			return nil, fmt.Errorf("Error getting tags: %v", err)
+		}
+		if err := zettelLinks(s.DB, &zettels[i]); err != nil {
+			return nil, fmt.Errorf("Error getting links: %v", err)
+		}
+	}
+	return zettels, nil
+}
+
 // AllZettels returns all existing zettel files with optional sorting.
 // Optional argument should be a valid SQL ORDER BY clause, e.g., "mtime DESC".
 func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
