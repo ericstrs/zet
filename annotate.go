@@ -148,12 +148,12 @@ func AnnotateLink(s *storage.Storage, zetDir, dbPath, content string) ([]string,
 				// for instances involving big zettel's to give a single.
 				// Otherwise, the chatbot will lose sight of the goal and do
 				// things like refactor the text.
-				Content: "<input>\n<source>\n" + fromZettel + "\n</source>\n<target>\n" + zettel + "\n</target>Remember, I want you to Generate a **concise, single-sentence** description explaining why the link to the target zettel is important. ONLY give this single sentence, NOTHING else. This single sentence should look something like: \"Follow this link to understand [brief description of content or reason for the topic].\"\n</input>",
+				Content: "<input>\n<source>\n" + fromZettel + "\n</source>\n<target>\n" + zettel + "\n</target>Remember, I want you to Generate a **concise, single-sentence** description explaining how following the link to the target zettel would be supplemental to the material in the source zettel. ONLY give this single sentence, NOTHING else. This single sentence should look something like: \"Learn [brief description of content or reason for the topic].\"\n</input>",
 			},
 		}
 		ctx := context.Background()
 		req := &api.ChatRequest{
-			Model:    "llama3.1",
+			Model:    "gemma3:27b",
 			Messages: messages,
 		}
 		var response string
