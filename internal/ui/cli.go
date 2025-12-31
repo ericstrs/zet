@@ -657,12 +657,15 @@ func ListCmd(args []string) error {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
 
-	// Parse -p/--plain flag (plain output) and remove from args
+	// Parse flags and remove from args
 	plain := false
+	desc := false
 	var filteredArgs []string
 	for _, arg := range args {
 		if arg == "-p" || arg == "--plain" {
 			plain = true
+		} else if arg == "-d" || arg == "--desc" {
+			desc = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
@@ -705,7 +708,11 @@ func ListCmd(args []string) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse date arguments: %v", err)
 			}
-			zettels, err = meta.ListByDateRange(c.ZetDir, c.DBPath, start, end)
+			sortOrder := "ASC"
+			if desc {
+				sortOrder = "DESC"
+			}
+			zettels, err = meta.ListByDateRange(c.ZetDir, c.DBPath, start, end, sortOrder)
 			if err != nil {
 				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 			}

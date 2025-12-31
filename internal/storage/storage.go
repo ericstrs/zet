@@ -78,13 +78,14 @@ func (s *Storage) GetDB() *sqlx.DB {
 
 // ZettelsByDateRange returns zettels within a date range based on dir_name.
 // startDate and endDate should be in YYYYMMDD format (will be padded for full day range).
-func (s *Storage) ZettelsByDateRange(startDate, endDate string) ([]Zettel, error) {
+// The sort parameter should be "ASC" or "DESC".
+func (s *Storage) ZettelsByDateRange(startDate, endDate, sort string) ([]Zettel, error) {
 	zettels := []Zettel{}
 	// Pad dates to match dir_name format (YYYYMMDDHHmmss)
 	startISO := startDate + "000000"
 	endISO := endDate + "235959"
 
-	query := `SELECT * FROM zettel WHERE dir_name >= $1 AND dir_name <= $2 ORDER BY dir_name ASC`
+	query := fmt.Sprintf(`SELECT * FROM zettel WHERE dir_name >= $1 AND dir_name <= $2 ORDER BY dir_name %s`, sort)
 	if err := s.DB.Select(&zettels, query, startISO, endISO); err != nil {
 		return nil, fmt.Errorf("Error getting zettels by date range: %v", err)
 	}
