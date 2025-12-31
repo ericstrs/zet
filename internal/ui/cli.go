@@ -113,8 +113,8 @@ USAGE
 
 FLAGS
 
-  -d  Descending order (most recent first). Applies to modified and its subcommands.
-  -p  Plain output (no ANSI color codes).
+  -d, --desc   Descending order (most recent first). Applies to modified and its subcommands.
+  -p, --plain  Plain output (no ANSI color codes).
 
 SUBCOMMANDS
 
@@ -657,11 +657,11 @@ func ListCmd(args []string) error {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
 
-	// Parse -p flag (plain output) and remove from args
+	// Parse -p/--plain flag (plain output) and remove from args
 	plain := false
 	var filteredArgs []string
 	for _, arg := range args {
-		if arg == "-p" {
+		if arg == "-p" || arg == "--plain" {
 			plain = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
@@ -729,11 +729,11 @@ func ListCmd(args []string) error {
 // - List all zettels sorted by mtime: zet list modified [-d]
 // - Filter by temporal period: zet list modified day|week|month|year [-d] [date] [-N] [-N:]
 func handleModifiedCmd(c *config.C, args []string) ([]storage.Zettel, error) {
-	// Parse -d flag and separate from other args
+	// Parse -d/--desc flag and separate from other args
 	desc := false
 	var remainingArgs []string
 	for _, arg := range args {
-		if arg == "-d" {
+		if arg == "-d" || arg == "--desc" {
 			desc = true
 		} else {
 			remainingArgs = append(remainingArgs, arg)
