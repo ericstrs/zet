@@ -76,6 +76,30 @@ func (s *Storage) GetDB() *sqlx.DB {
 	return s.DB
 }
 
+// ZettelsByDateRange returns zettels within a date range based on dir_name.
+// startDate and endDate should be in YYYYMMDD format (will be padded for full day range).
+func (s *Storage) ZettelsByDateRange(startDate, endDate string) ([]Zettel, error) {
+	zettels := []Zettel{}
+	// Pad dates to match dir_name format (YYYYMMDDHHmmss)
+	startISO := startDate + "000000"
+	endISO := endDate + "235959"
+
+	query := `SELECT * FROM zettel WHERE dir_name >= $1 AND dir_name <= $2 ORDER BY dir_name ASC`
+	if err := s.DB.Select(&zettels, query, startISO, endISO); err != nil {
+		return nil, fmt.Errorf("Error getting zettels by date range: %v", err)
+	}
+
+	for i := range zettels {
+		if err := zettelTags(s.DB, &zettels[i]); err != nil {
+			return nil, fmt.Errorf("Error getting tags: %v", err)
+		}
+		if err := zettelLinks(s.DB, &zettels[i]); err != nil {
+			return nil, fmt.Errorf("Error getting links: %v", err)
+		}
+	}
+	return zettels, nil
+}
+
 // AllZettels returns all existing zettel files with optional sorting.
 // Optional argument should be a valid SQL ORDER BY clause, e.g., "mtime DESC".
 func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
@@ -260,7 +284,7 @@ func NewStorage(db *sqlx.DB) (*Storage, error) {
 	return &Storage{DB: db}, err
 }
 
-// Close closes th database connection.
+// Close closes the database connection.
 func (s *Storage) Close() {
 	s.DB.Close()
 }

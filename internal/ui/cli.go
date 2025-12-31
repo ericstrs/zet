@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/ericstrs/zet"
@@ -108,6 +110,26 @@ USAGE
   zet list|ls length   - Prints all zettels sorted by word count.
   zet list|ls alpha    - Prints all zettels by alphabetically sorted titles.
   zet list|ls help     - Provides command information.
+
+SUBCOMMANDS
+
+  day [YYYY-MM-DD] [-N] [-N:]   - Print daily view. -N for N days ago, -N: for range.
+  week [YYYY-MM-DD] [-N] [-N:]  - Print weekly view. -N for N weeks ago, -N: for range.
+  month [YYYY-MM] [-N] [-N:]    - Print monthly view. -N for N months ago, -N: for range.
+  year [YYYY] [-N] [-N:]        - Print yearly view. -N for N years ago, -N: for range.
+
+EXAMPLES
+
+  zet list day              - Show today's zettels.
+  zet list day 2024-12-25   - Show zettels from Dec 25, 2024.
+  zet list day -3           - Show zettels from 3 days ago.
+  zet list day -3:          - Show zettels from 3 days ago to today.
+  zet list week             - Show this week's zettels.
+  zet list week -2          - Show zettels from 2 weeks ago.
+  zet list month            - Show this month's zettels.
+  zet list month 2024-06    - Show zettels from June 2024.
+  zet list year             - Show this year's zettels.
+  zet list year -1:         - Show zettels from last year to now.
 
 DESCRIPTION
 
@@ -624,14 +646,16 @@ func ListCmd(args []string) error {
 
 	var zettels []storage.Zettel
 	var err error
-	switch n {
-	case 2: // no args
+
+	if n == 2 {
+		// no args
 		zettels, err = meta.List(c.ZetDir, c.DBPath, `dir_name ASC`)
 		if err != nil {
 			return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
 		}
-	case 3: // one arg
-		switch strings.ToLower(args[2]) {
+	} else if n >= 3 {
+		subcmd := strings.ToLower(args[2])
+		switch subcmd {
 		case `recent`:
 			zettels, err = meta.List(c.ZetDir, c.DBPath, `mtime ASC`)
 			if err != nil {
@@ -650,6 +674,15 @@ func ListCmd(args []string) error {
 		case `help`:
 			fmt.Printf(listUsage)
 			return nil
+		case `day`, `week`, `month`, `year`:
+			start, end, err := parseDateArgs(subcmd, args[3:])
+			if err != nil {
+				return fmt.Errorf("Failed to parse date arguments: %v", err)
+			}
+			zettels, err = meta.ListByDateRange(c.ZetDir, c.DBPath, start, end)
+			if err != nil {
+				return fmt.Errorf("Failed to retrieve list of zettels: %v", err)
+			}
 		default:
 			fmt.Fprintln(os.Stderr, "Error: incorrect sub-command.")
 			fmt.Fprintf(os.Stderr, listUsage)
@@ -660,6 +693,114 @@ func ListCmd(args []string) error {
 		fmt.Println(yellow + z.DirName + reset + " " + z.Title)
 	}
 	return nil
+}
+
+// parseDateArgs parses date arguments for day/week/month/year subcommands.
+// Returns start and end dates in YYYYMMDD format.
+func parseDateArgs(period string, args []string) (string, string, error) {
+	now := time.Now()
+
+	// No additional args - use current period
+	if len(args) == 0 {
+		return dateRangeForPeriod(now, period)
+	}
+
+	arg := args[0]
+
+	// Check for -N or -N: format (relative offset)
+	if strings.HasPrefix(arg, "-") {
+		isRange := strings.HasSuffix(arg, ":")
+		numStr := strings.TrimPrefix(arg, "-")
+		numStr = strings.TrimSuffix(numStr, ":")
+
+		offset, err := strconv.Atoi(numStr)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid offset: %s", arg)
+		}
+
+		targetDate := shiftDate(now, period, -offset)
+		start, end, err := dateRangeForPeriod(targetDate, period)
+		if err != nil {
+			return "", "", err
+		}
+
+		if isRange {
+			// -N: means from N periods ago to now
+			_, endNow, err := dateRangeForPeriod(now, period)
+			if err != nil {
+				return "", "", err
+			}
+			end = endNow
+		}
+		return start, end, nil
+	}
+
+	// Parse explicit date
+	targetDate, err := parseExplicitDate(arg, period)
+	if err != nil {
+		return "", "", err
+	}
+	return dateRangeForPeriod(targetDate, period)
+}
+
+// parseExplicitDate parses a date string based on the period type.
+func parseExplicitDate(dateStr, period string) (time.Time, error) {
+	var layout string
+	switch period {
+	case "day":
+		layout = "2006-01-02"
+	case "week":
+		layout = "2006-01-02"
+	case "month":
+		layout = "2006-01"
+	case "year":
+		layout = "2006"
+	}
+	return time.Parse(layout, dateStr)
+}
+
+// shiftDate shifts a date by the given offset for the specified period.
+func shiftDate(t time.Time, period string, offset int) time.Time {
+	switch period {
+	case "day":
+		return t.AddDate(0, 0, offset)
+	case "week":
+		return t.AddDate(0, 0, offset*7)
+	case "month":
+		return t.AddDate(0, offset, 0)
+	case "year":
+		return t.AddDate(offset, 0, 0)
+	}
+	return t
+}
+
+// dateRangeForPeriod returns start and end dates in YYYYMMDD format for the given period.
+func dateRangeForPeriod(t time.Time, period string) (string, string, error) {
+	var start, end time.Time
+
+	switch period {
+	case "day":
+		start = t
+		end = t
+	case "week":
+		// Week starts on Monday
+		weekday := int(t.Weekday())
+		if weekday == 0 {
+			weekday = 7 // Sunday = 7
+		}
+		start = t.AddDate(0, 0, -(weekday - 1))
+		end = start.AddDate(0, 0, 6)
+	case "month":
+		start = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+		end = start.AddDate(0, 1, -1)
+	case "year":
+		start = time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
+		end = time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location())
+	default:
+		return "", "", fmt.Errorf("unknown period: %s", period)
+	}
+
+	return start.Format("20060102"), end.Format("20060102"), nil
 }
 
 // LinkCmd parses and validates user arguments for the link command.
