@@ -114,6 +114,7 @@ USAGE
 FLAGS
 
   -d  Descending order (most recent first). Applies to modified and its subcommands.
+  -p  Plain output (no ANSI color codes).
 
 SUBCOMMANDS
 
@@ -655,6 +656,18 @@ func ListCmd(args []string) error {
 	if err := c.Init(); err != nil {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
+
+	// Parse -p flag (plain output) and remove from args
+	plain := false
+	var filteredArgs []string
+	for _, arg := range args {
+		if arg == "-p" {
+			plain = true
+		} else {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+	args = filteredArgs
 	n := len(args)
 
 	var zettels []storage.Zettel
@@ -703,7 +716,11 @@ func ListCmd(args []string) error {
 		}
 	}
 	for _, z := range zettels {
-		fmt.Println(yellow + z.DirName + reset + " " + z.Title)
+		if plain {
+			fmt.Println(z.DirName + " " + z.Title)
+		} else {
+			fmt.Println(yellow + z.DirName + reset + " " + z.Title)
+		}
 	}
 	return nil
 }
