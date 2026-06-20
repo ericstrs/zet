@@ -1,15 +1,22 @@
 package zet
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/ericstrs/zet/internal/meta"
 	"github.com/ericstrs/zet/internal/storage"
-
-	"github.com/ollama/ollama/api"
 )
 
 const (
@@ -111,6 +118,114 @@ var (
 	linkRegex = regexp.MustCompile(`^.*(\[(.+)\]\(\.\./(.*?)/?\) (.+))`)
 )
 
+type ollamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ollamaChatRequest struct {
+	Model    string          `json:"model"`
+	Messages []ollamaMessage `json:"messages"`
+}
+
+type ollamaChatResponse struct {
+	Message ollamaMessage `json:"message"`
+	Error   string        `json:"error,omitempty"`
+}
+
+func ollamaHost() *url.URL {
+	defaultPort := "11434"
+	raw := strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
+	scheme, hostport, ok := strings.Cut(raw, "://")
+	switch {
+	case !ok:
+		scheme, hostport = "http", raw
+		if raw == "ollama.com" {
+			scheme, hostport = "https", "ollama.com:443"
+		}
+	case scheme == "http":
+		defaultPort = "80"
+	case scheme == "https":
+		defaultPort = "443"
+	}
+
+	hostport, path, _ := strings.Cut(hostport, "/")
+	host, port, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host, port = "127.0.0.1", defaultPort
+		if ip := net.ParseIP(strings.Trim(hostport, "[]")); ip != nil {
+			host = ip.String()
+		} else if hostport != "" {
+			host = hostport
+		}
+	}
+
+	if n, err := strconv.ParseInt(port, 10, 32); err != nil || n > 65535 || n < 0 {
+		port = defaultPort
+	}
+
+	return &url.URL{
+		Scheme: scheme,
+		Host:   net.JoinHostPort(host, port),
+		Path:   path,
+	}
+}
+
+func chatWithOllama(ctx context.Context, model string, messages []ollamaMessage) (string, error) {
+	body, err := json.Marshal(ollamaChatRequest{
+		Model:    model,
+		Messages: messages,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ollamaHost().JoinPath("/api/chat").String(), bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/x-ndjson")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var response strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for scanner.Scan() {
+		var chunk ollamaChatResponse
+		line := scanner.Bytes()
+		if err := json.Unmarshal(line, &chunk); err != nil {
+			if resp.StatusCode >= http.StatusBadRequest {
+				return "", fmt.Errorf("ollama %s: %s", resp.Status, string(line))
+			}
+			return "", err
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			if chunk.Error != "" {
+				return "", fmt.Errorf("ollama %s: %s", resp.Status, chunk.Error)
+			}
+			return "", fmt.Errorf("ollama %s", resp.Status)
+		}
+		if chunk.Error != "" {
+			return "", errors.New(chunk.Error)
+		}
+		response.WriteString(chunk.Message.Content)
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("ollama %s", resp.Status)
+	}
+
+	return response.String(), nil
+}
+
 // AnnotateLink annotates zettel links with a reason why someone should
 // follow the link to the referenced content
 func AnnotateLink(s *storage.Storage, zetDir, dbPath, content string) ([]string, error) {
@@ -132,17 +247,12 @@ func AnnotateLink(s *storage.Storage, zetDir, dbPath, content string) ([]string,
 			continue
 		}
 
-		client, err := api.ClientFromEnvironment()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		messages := []api.Message{
-			api.Message{
+		messages := []ollamaMessage{
+			{
 				Role:    "system",
 				Content: system,
 			},
-			api.Message{
+			{
 				Role: "user",
 				// Note: Appending the reminder for the chatbots purpose is necessary
 				// for instances involving big zettel's to give a single.
@@ -152,16 +262,7 @@ func AnnotateLink(s *storage.Storage, zetDir, dbPath, content string) ([]string,
 			},
 		}
 		ctx := context.Background()
-		req := &api.ChatRequest{
-			Model:    "gemma3:27b",
-			Messages: messages,
-		}
-		var response string
-		respFunc := func(resp api.ChatResponse) error {
-			response += resp.Message.Content
-			return nil
-		}
-		err = client.Chat(ctx, req, respFunc)
+		response, err := chatWithOllama(ctx, "gemma3:27b", messages)
 		if err != nil {
 			return nil, err
 		}
