@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ericstrs/zet"
@@ -14,6 +15,12 @@ import (
 	"github.com/ericstrs/zet/internal/storage"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+)
+
+const (
+	syncStateRunning int32 = iota
+	syncStateDone
+	syncStateFailed
 )
 
 type SearchUI struct {
@@ -29,31 +36,37 @@ type SearchUI struct {
 	// title, tag line, or zettel.
 	list *tview.Table
 
+	// status displays background sync state without changing the active list.
+	status *tview.TextView
+
 	// storage is a pointer to the Storage struct which handles
 	// interactions with the database.
 	storage *storage.Storage
 
 	// screenWidth holds the width of the screen in characters.
 	screenWidth int
+
+	syncState atomic.Int32
 }
 
 // NewSearchUI creates and initializes a new SearchUI.
-func NewSearchUI(s *storage.Storage, query, zetDir, editor string) *SearchUI {
+func NewSearchUI(s *storage.Storage, query, zetDir, dbPath, editor string) *SearchUI {
 	sui := &SearchUI{
 		app:         tview.NewApplication(),
 		inputField:  tview.NewInputField(),
 		list:        tview.NewTable(),
+		status:      tview.NewTextView(),
 		storage:     s,
 		screenWidth: 50,
 	}
 
-	sui.setupUI(query, zetDir, editor)
+	sui.setupUI(query, zetDir, dbPath, editor)
 
 	return sui
 }
 
 // setupUI configures the UI elements.
-func (sui *SearchUI) setupUI(query, zetDir, editor string) {
+func (sui *SearchUI) setupUI(query, zetDir, dbPath, editor string) {
 	sui.globalInput()
 
 	// Update screen width before drawing. This won't affect the current
@@ -63,38 +76,33 @@ func (sui *SearchUI) setupUI(query, zetDir, editor string) {
 		return false
 	})
 
-	t := "Loading all zettels in the background. Begin typing to search, or wait to browse."
-	zettels := []storage.Zettel{storage.Zettel{Title: t}}
-	go func() {
-		zettels, _ = sui.storage.AllZettels(`dir_name DESC`)
-		sui.app.QueueUpdateDraw(func() {
-			text := sui.inputField.GetText()
-			if text == "" {
-				sui.displayAll(zettels)
-			}
-		})
-	}()
-
 	sui.inputField.SetLabel("Search: ").
 		SetFieldWidth(30)
-	sui.ipInput(zetDir, editor, &zettels)
+	if query != "" {
+		sui.inputField.SetText(query)
+	}
+	sui.ipInput(zetDir, editor)
+
+	sui.status.SetTextColor(tcell.ColorGray)
+	sui.setStatus("syncing...")
 
 	sui.list.SetBorder(true)
 	style := tcell.StyleDefault.Background(tcell.Color107).Foreground(tcell.ColorBlack)
 	sui.list.SetSelectedStyle(style)
 	sui.listInput(zetDir, editor)
 
-	switch query {
-	case "":
-		sui.displayAll(zettels)
-	default:
-		sui.inputField.SetText(query)
-	}
+	sui.list.SetCellSimple(0, 0, "Loading cached notes.")
+	sui.loadInitialView(query, zetDir, dbPath)
 
-	// Create a Flex layout to position the inputField and list
+	// Create a Flex layout to position the input field, status, and list.
+	topBar := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(sui.inputField, 39, 0, true).
+		AddItem(sui.status, 32, 0, false)
+
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(sui.inputField, 1, 0, true).
+		AddItem(topBar, 1, 0, true).
 		AddItem(sui.list, 0, 1, false)
 
 	sui.app.SetRoot(flex, true)
@@ -106,6 +114,9 @@ func (sui *SearchUI) globalInput() {
 		switch event.Key() {
 		case tcell.KeyEscape:
 			sui.app.Stop()
+		case tcell.KeyCtrlR:
+			sui.refreshCurrentView()
+			return nil
 		}
 		return event
 	})
@@ -118,8 +129,9 @@ func (sui *SearchUI) globalInput() {
 //
 //   - Enter: Sets focus to results list.
 //   - Ctrl+Enter: Uses current search query as title for new zettel.
+//   - Ctrl+R: Refreshes the current view from the latest database snapshot.
 //   - Esc: Exits the search interface.
-func (sui *SearchUI) ipInput(zetDir, editor string, zettels *[]storage.Zettel) {
+func (sui *SearchUI) ipInput(zetDir, editor string) {
 	var debounceTimer *time.Timer
 	sui.inputField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// If ctrl+enter pressed, create and open zettel.
@@ -143,19 +155,7 @@ func (sui *SearchUI) ipInput(zetDir, editor string, zettels *[]storage.Zettel) {
 			debounceTimer.Stop()
 		}
 		debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
-			go func() {
-				latestText := sui.inputField.GetText()
-				if latestText == "" {
-					sui.app.QueueUpdateDraw(func() {
-						sui.displayAll(*zettels)
-					})
-					return
-				}
-				zettels := sui.performSearch(latestText)
-				sui.app.QueueUpdateDraw(func() {
-					sui.updateList(zettels)
-				})
-			}()
+			sui.loadView(text, true)
 		})
 	}).
 		SetDoneFunc(func(key tcell.Key) {
@@ -166,7 +166,139 @@ func (sui *SearchUI) ipInput(zetDir, editor string, zettels *[]storage.Zettel) {
 		})
 }
 
+func (sui *SearchUI) loadInitialView(query, zetDir, dbPath string) {
+	go func() {
+		if query == "" {
+			zettels, err := sui.storage.ZettelSummaries(`dir_name DESC`)
+			sui.app.QueueUpdateDraw(func() {
+				if sui.inputField.GetText() != query {
+					return
+				}
+				if err != nil {
+					sui.displayMessage(fmt.Sprintf("Error loading cached notes: %v", err))
+					return
+				}
+				sui.displayAll(zettels)
+			})
+			sui.startBackgroundSync(zetDir, dbPath)
+			return
+		}
+
+		zettels := sui.performSearch(query)
+		sui.app.QueueUpdateDraw(func() {
+			if sui.inputField.GetText() != query {
+				return
+			}
+			sui.updateList(zettels)
+		})
+		sui.startBackgroundSync(zetDir, dbPath)
+	}()
+}
+
+func (sui *SearchUI) loadView(query string, userInitiated bool) {
+	go func() {
+		syncDoneAtStart := sui.syncState.Load() == syncStateDone
+		if query == "" {
+			zettels, err := sui.storage.ZettelSummaries(`dir_name DESC`)
+			sui.app.QueueUpdateDraw(func() {
+				if sui.inputField.GetText() != query {
+					return
+				}
+				if err != nil {
+					sui.displayMessage(fmt.Sprintf("Error loading cached notes: %v", err))
+					return
+				}
+				sui.displayAll(zettels)
+				if userInitiated {
+					sui.setStatusAfterRefresh(syncDoneAtStart)
+				}
+			})
+			return
+		}
+
+		zettels := sui.performSearch(query)
+		sui.app.QueueUpdateDraw(func() {
+			if sui.inputField.GetText() != query {
+				return
+			}
+			sui.updateList(zettels)
+			if userInitiated {
+				sui.setStatusAfterRefresh(syncDoneAtStart)
+			}
+		})
+	}()
+}
+
+func (sui *SearchUI) refreshCurrentView() {
+	sui.setStatus("refreshing...")
+	sui.loadView(sui.inputField.GetText(), true)
+}
+
+func (sui *SearchUI) startBackgroundSync(zetDir, dbPath string) {
+	sui.syncState.Store(syncStateRunning)
+	go func() {
+		s, err := storage.UpdateDB(zetDir, dbPath)
+		if s != nil {
+			s.Close()
+		}
+		if err != nil {
+			sui.syncState.Store(syncStateFailed)
+			sui.app.QueueUpdateDraw(func() {
+				sui.setStatus("sync failed: " + shortStatusError(err))
+			})
+			return
+		}
+
+		sui.syncState.Store(syncStateDone)
+		sui.app.QueueUpdateDraw(func() {
+			if sui.inputField.HasFocus() {
+				sui.refreshCurrentView()
+				return
+			}
+			sui.setStatus("fresh data available")
+		})
+	}()
+}
+
+func (sui *SearchUI) setStatusAfterRefresh(syncDoneAtStart bool) {
+	switch sui.syncState.Load() {
+	case syncStateDone:
+		if syncDoneAtStart {
+			sui.setStatus("fresh")
+		} else {
+			sui.setStatus("fresh data available")
+		}
+	case syncStateFailed:
+		// Keep the failure visible; the current view still came from the last
+		// successful database snapshot.
+	default:
+		sui.setStatus("syncing...")
+	}
+}
+
+func (sui *SearchUI) setStatus(text string) {
+	sui.status.SetText(text)
+}
+
+func shortStatusError(err error) string {
+	msg := err.Error()
+	if len(msg) > 19 {
+		return msg[:16] + "..."
+	}
+	return msg
+}
+
+func (sui *SearchUI) displayMessage(msg string) {
+	sui.list.Clear()
+	sui.list.SetCellSimple(0, 0, msg)
+}
+
 func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
+	sui.list.Clear()
+	if len(zettels) == 0 {
+		sui.list.SetCellSimple(0, 0, "No cached notes.")
+		return
+	}
 	row := 0
 	for i := 0; i < len(zettels); i++ {
 		z := zettels[i]
@@ -242,6 +374,7 @@ func (sui *SearchUI) updateList(zettels []storage.ResultZettel) {
 //   - M: Move to the center of the visible window.
 //   - L: Move to bottom of the visible window.
 //   - c: Open selected zettel in a newly created tmux window.
+//   - r: Refresh current view from the latest database snapshot.
 //   - space: Page down
 //   - b: Page up
 //   - ESC, q: Exits the search interface.
@@ -324,6 +457,9 @@ func (sui *SearchUI) listInput(zetDir, editor string) {
 				default:
 					log.Printf("Table cell doesn't reference storage.ResultZettel or storage.Zettel: %T\n", z)
 				}
+			case 'r': // refresh current view
+				sui.refreshCurrentView()
+				return nil
 			case 'b': // page up (Ctrl-B)
 				return tcell.NewEventKey(tcell.KeyCtrlB, 0, tcell.ModNone)
 			case ' ': // page down

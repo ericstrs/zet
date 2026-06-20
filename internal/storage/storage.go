@@ -152,6 +152,20 @@ func (s *Storage) AllZettels(sort string) ([]Zettel, error) {
 	return zettels, nil
 }
 
+// ZettelSummaries returns the fields needed for lightweight browse views.
+func (s *Storage) ZettelSummaries(sort string) ([]Zettel, error) {
+	zettels := []Zettel{}
+	query := `SELECT id, name, title, mtime, dir_name FROM zettel`
+	if sort != "" {
+		query = fmt.Sprintf("%s ORDER BY %s", query, sort)
+	}
+
+	if err := s.DB.Select(&zettels, query); err != nil {
+		return nil, fmt.Errorf("Error getting zettel summaries: %v", err)
+	}
+	return zettels, nil
+}
+
 // GetZettel returns a zettel from the database for a given zettel id.
 func GetZettel(db *sqlx.DB, id int) (Zettel, error) {
 	z := Zettel{}
@@ -276,6 +290,37 @@ func zettelLinks(db *sqlx.DB, z *Zettel) error {
 // database, and updates the database to sync the flat files and the
 // data storage.
 func UpdateDB(zetPath, dbPath string) (*Storage, error) {
+	s, err := OpenDB(dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	zm, err := s.zettelsMap()
+	if err != nil {
+		s.Close()
+		return nil, fmt.Errorf("Failed to get zettels: %v.\n", err)
+	}
+
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		s.Close()
+		return nil, fmt.Errorf("Failed to create transaction: %v\n", err)
+	}
+	if err := processZettels(tx, zetPath, zm); err != nil {
+		tx.Rollback()
+		s.Close()
+		return nil, fmt.Errorf("Failed to process zettels: %v.\n", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// OpenDB initializes the database connection without syncing flat files.
+func OpenDB(dbPath string) (*Storage, error) {
 	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to database: %v", err)
@@ -283,29 +328,19 @@ func UpdateDB(zetPath, dbPath string) (*Storage, error) {
 
 	s, err := NewStorage(db)
 	if err != nil {
+		db.Close()
 		return nil, fmt.Errorf("Failed to setup database: %v", err)
 	}
-
-	zm, err := s.zettelsMap()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get zettels: %v.\n", err)
-	}
-
-	tx, err := db.Beginx()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to create transaction: %v\n", err)
-	}
-	if err := processZettels(tx, zetPath, zm); err != nil {
-		return nil, fmt.Errorf("Failed to process zettels: %v.\n", err)
-	}
-
-	return s, tx.Commit()
+	return s, nil
 }
 
 // NewStorage creates and returns a new Storage instance with a given
 // database connection.
 func NewStorage(db *sqlx.DB) (*Storage, error) {
 	var err error
+	if _, err = db.Exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`); err != nil {
+		return nil, err
+	}
 	if _, err = db.Exec(tablesSQL); err != nil {
 		return nil, err
 	}

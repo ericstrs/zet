@@ -244,11 +244,6 @@ func SearchCmd(args []string) error {
 		return fmt.Errorf("Failed to initialize configuration file: %v", err)
 	}
 
-	s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
-	if err != nil {
-		return fmt.Errorf("Error syncing database and flat files: %v", err)
-	}
-	defer s.Close()
 	n := len(args)
 
 	if n < 3 {
@@ -264,6 +259,12 @@ func SearchCmd(args []string) error {
 			if query == "" {
 				return nil
 			}
+			s, err := storage.UpdateDB(c.ZetDir, c.DBPath)
+			if err != nil {
+				return fmt.Errorf("Error syncing database and flat files: %v", err)
+			}
+			defer s.Close()
+
 			zettels, err := s.SearchZettels(query, red, reset)
 			if err != nil {
 				zettels = []storage.ResultZettel{storage.ResultZettel{TitleSnippet: "Incorrect syntax"}}
@@ -279,7 +280,13 @@ func SearchCmd(args []string) error {
 				}
 			}
 		case `browse`, `b`:
-			if err := NewSearchUI(s, query, c.ZetDir, c.Editor).Run(); err != nil {
+			s, err := storage.OpenDB(c.DBPath)
+			if err != nil {
+				return fmt.Errorf("Error opening database: %v", err)
+			}
+			defer s.Close()
+
+			if err := NewSearchUI(s, query, c.ZetDir, c.DBPath, c.Editor).Run(); err != nil {
 				return fmt.Errorf("Error running search ui: %v", err)
 			}
 		default:
