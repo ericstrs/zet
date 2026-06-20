@@ -33,6 +33,7 @@ Input field:
 
 |Keys|Description|
 |----|-----------|
+|<kbd>tab</kbd>|Toggle between title and all-content search|
 |<kbd>ctrl+Enter</kbd>|Use current input field text as title for new note|
 
 Results list:
@@ -49,6 +50,8 @@ Results list:
 |<kbd>ESC, q</kbd>|Exists the search interface|
 
 FTS filters:
+
+The TUI search field defaults to title search. Press <kbd>tab</kbd> to toggle between title and all-content search.
 
 * `title: <term>` or `t: <term>`
 * `body: <term>` or `b: <term>`

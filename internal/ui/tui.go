@@ -23,6 +23,21 @@ const (
 	syncStateFailed
 )
 
+type searchMode int32
+
+const (
+	searchModeTitle searchMode = iota
+	searchModeAll
+)
+
+type searchFilter string
+
+const (
+	searchFilterTitle searchFilter = "title"
+	searchFilterBody  searchFilter = "body"
+	searchFilterTags  searchFilter = "tags"
+)
+
 type SearchUI struct {
 	// app is a reference to the tview application
 	app *tview.Application
@@ -46,7 +61,8 @@ type SearchUI struct {
 	// screenWidth holds the width of the screen in characters.
 	screenWidth int
 
-	syncState atomic.Int32
+	syncState  atomic.Int32
+	searchMode atomic.Int32
 }
 
 // NewSearchUI creates and initializes a new SearchUI.
@@ -67,6 +83,7 @@ func NewSearchUI(s *storage.Storage, query, zetDir, dbPath, editor string) *Sear
 
 // setupUI configures the UI elements.
 func (sui *SearchUI) setupUI(query, zetDir, dbPath, editor string) {
+	query = normalizeInitialSearchText(query)
 	sui.globalInput()
 
 	// Update screen width before drawing. This won't affect the current
@@ -76,8 +93,8 @@ func (sui *SearchUI) setupUI(query, zetDir, dbPath, editor string) {
 		return false
 	})
 
-	sui.inputField.SetLabel("Search: ").
-		SetFieldWidth(30)
+	sui.setSearchMode(searchModeTitle)
+	sui.inputField.SetFieldWidth(30)
 	if query != "" {
 		sui.inputField.SetText(query)
 	}
@@ -114,6 +131,9 @@ func (sui *SearchUI) globalInput() {
 		switch event.Key() {
 		case tcell.KeyEscape:
 			sui.app.Stop()
+		case tcell.KeyTab:
+			sui.toggleSearchMode()
+			return nil
 		case tcell.KeyCtrlR:
 			sui.refreshCurrentView()
 			return nil
@@ -167,11 +187,12 @@ func (sui *SearchUI) ipInput(zetDir, editor string) {
 }
 
 func (sui *SearchUI) loadInitialView(query, zetDir, dbPath string) {
+	mode := sui.currentSearchMode()
 	go func() {
 		if query == "" {
 			zettels, err := sui.storage.ZettelSummaries(`dir_name DESC`)
 			sui.app.QueueUpdateDraw(func() {
-				if sui.inputField.GetText() != query {
+				if sui.inputField.GetText() != query || sui.currentSearchMode() != mode {
 					return
 				}
 				if err != nil {
@@ -184,9 +205,9 @@ func (sui *SearchUI) loadInitialView(query, zetDir, dbPath string) {
 			return
 		}
 
-		zettels := sui.performSearch(query)
+		zettels := sui.performSearch(query, mode)
 		sui.app.QueueUpdateDraw(func() {
-			if sui.inputField.GetText() != query {
+			if sui.inputField.GetText() != query || sui.currentSearchMode() != mode {
 				return
 			}
 			sui.updateList(zettels)
@@ -196,12 +217,13 @@ func (sui *SearchUI) loadInitialView(query, zetDir, dbPath string) {
 }
 
 func (sui *SearchUI) loadView(query string, userInitiated bool) {
+	mode := sui.currentSearchMode()
 	go func() {
 		syncDoneAtStart := sui.syncState.Load() == syncStateDone
 		if query == "" {
 			zettels, err := sui.storage.ZettelSummaries(`dir_name DESC`)
 			sui.app.QueueUpdateDraw(func() {
-				if sui.inputField.GetText() != query {
+				if sui.inputField.GetText() != query || sui.currentSearchMode() != mode {
 					return
 				}
 				if err != nil {
@@ -216,9 +238,9 @@ func (sui *SearchUI) loadView(query string, userInitiated bool) {
 			return
 		}
 
-		zettels := sui.performSearch(query)
+		zettels := sui.performSearch(query, mode)
 		sui.app.QueueUpdateDraw(func() {
-			if sui.inputField.GetText() != query {
+			if sui.inputField.GetText() != query || sui.currentSearchMode() != mode {
 				return
 			}
 			sui.updateList(zettels)
@@ -232,6 +254,34 @@ func (sui *SearchUI) loadView(query string, userInitiated bool) {
 func (sui *SearchUI) refreshCurrentView() {
 	sui.setStatus("refreshing...")
 	sui.loadView(sui.inputField.GetText(), true)
+}
+
+func (sui *SearchUI) currentSearchMode() searchMode {
+	return searchMode(sui.searchMode.Load())
+}
+
+func (sui *SearchUI) setSearchMode(mode searchMode) {
+	sui.searchMode.Store(int32(mode))
+	sui.inputField.SetLabel(mode.label())
+}
+
+func (sui *SearchUI) toggleSearchMode() {
+	switch sui.currentSearchMode() {
+	case searchModeTitle:
+		sui.setSearchMode(searchModeAll)
+	default:
+		sui.setSearchMode(searchModeTitle)
+	}
+	sui.loadView(sui.inputField.GetText(), true)
+}
+
+func (mode searchMode) label() string {
+	switch mode {
+	case searchModeAll:
+		return "All: "
+	default:
+		return "Title: "
+	}
 }
 
 func (sui *SearchUI) startBackgroundSync(zetDir, dbPath string) {
@@ -312,7 +362,11 @@ func (sui *SearchUI) displayAll(zettels []storage.Zettel) {
 }
 
 // performSearch gets result zettels to update the results list.
-func (sui *SearchUI) performSearch(query string) []storage.ResultZettel {
+func (sui *SearchUI) performSearch(query string, mode searchMode) []storage.ResultZettel {
+	if query == "" {
+		return []storage.ResultZettel{}
+	}
+	query = buildSearchQuery(query, mode)
 	if query == "" {
 		return []storage.ResultZettel{}
 	}
@@ -321,6 +375,68 @@ func (sui *SearchUI) performSearch(query string) []storage.ResultZettel {
 		zettels = []storage.ResultZettel{storage.ResultZettel{TitleSnippet: "Incorrect syntax"}}
 	}
 	return zettels
+}
+
+func buildSearchQuery(query string, mode searchMode) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ""
+	}
+
+	filter, term, ok := splitSearchFilter(query)
+	if ok && term == "" {
+		return ""
+	}
+
+	switch mode {
+	case searchModeAll:
+		if ok && filter == searchFilterTitle {
+			return term
+		}
+		return query
+	default:
+		if ok {
+			if filter == searchFilterTitle {
+				return titleSearchQuery(term)
+			}
+			return query
+		}
+		return titleSearchQuery(query)
+	}
+}
+
+func titleSearchQuery(query string) string {
+	return fmt.Sprintf("title:(%s)", query)
+}
+
+func normalizeInitialSearchText(query string) string {
+	filter, term, ok := splitSearchFilter(query)
+	if ok && filter == searchFilterTitle {
+		return term
+	}
+	return query
+}
+
+func splitSearchFilter(query string) (searchFilter, string, bool) {
+	query = strings.TrimSpace(query)
+	lower := strings.ToLower(query)
+	prefixes := []struct {
+		prefix string
+		filter searchFilter
+	}{
+		{"title:", searchFilterTitle},
+		{"t:", searchFilterTitle},
+		{"body:", searchFilterBody},
+		{"b:", searchFilterBody},
+		{"tags:", searchFilterTags},
+		{"#:", searchFilterTags},
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(lower, p.prefix) {
+			return p.filter, strings.TrimSpace(query[len(p.prefix):]), true
+		}
+	}
+	return "", query, false
 }
 
 // updateList updates the results list with a given slice of zettels.
