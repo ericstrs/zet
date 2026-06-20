@@ -61,8 +61,9 @@ type SearchUI struct {
 	// screenWidth holds the width of the screen in characters.
 	screenWidth int
 
-	syncState  atomic.Int32
-	searchMode atomic.Int32
+	syncState      atomic.Int32
+	pendingRefresh atomic.Bool
+	searchMode     atomic.Int32
 }
 
 // NewSearchUI creates and initializes a new SearchUI.
@@ -256,6 +257,13 @@ func (sui *SearchUI) refreshCurrentView() {
 	sui.loadView(sui.inputField.GetText(), true)
 }
 
+func (sui *SearchUI) refreshPendingFreshData() {
+	if !sui.pendingRefresh.CompareAndSwap(true, false) {
+		return
+	}
+	sui.refreshCurrentView()
+}
+
 func (sui *SearchUI) currentSearchMode() searchMode {
 	return searchMode(sui.searchMode.Load())
 }
@@ -286,6 +294,7 @@ func (mode searchMode) label() string {
 
 func (sui *SearchUI) startBackgroundSync(zetDir, dbPath string) {
 	sui.syncState.Store(syncStateRunning)
+	sui.pendingRefresh.Store(false)
 	go func() {
 		s, err := storage.UpdateDB(zetDir, dbPath)
 		if s != nil {
@@ -293,6 +302,7 @@ func (sui *SearchUI) startBackgroundSync(zetDir, dbPath string) {
 		}
 		if err != nil {
 			sui.syncState.Store(syncStateFailed)
+			sui.pendingRefresh.Store(false)
 			sui.app.QueueUpdateDraw(func() {
 				sui.setStatus("sync failed: " + shortStatusError(err))
 			})
@@ -300,9 +310,10 @@ func (sui *SearchUI) startBackgroundSync(zetDir, dbPath string) {
 		}
 
 		sui.syncState.Store(syncStateDone)
+		sui.pendingRefresh.Store(true)
 		sui.app.QueueUpdateDraw(func() {
 			if sui.inputField.HasFocus() {
-				sui.refreshCurrentView()
+				sui.refreshPendingFreshData()
 				return
 			}
 			sui.setStatus("fresh data available")
@@ -314,9 +325,12 @@ func (sui *SearchUI) setStatusAfterRefresh(syncDoneAtStart bool) {
 	switch sui.syncState.Load() {
 	case syncStateDone:
 		if syncDoneAtStart {
+			sui.pendingRefresh.Store(false)
 			sui.setStatus("fresh")
-		} else {
+		} else if sui.pendingRefresh.Load() {
 			sui.setStatus("fresh data available")
+		} else {
+			sui.setStatus("fresh")
 		}
 	case syncStateFailed:
 		// Keep the failure visible; the current view still came from the last
@@ -595,6 +609,7 @@ func (sui *SearchUI) listInput(zetDir, editor string) {
 				if row == 0 {
 					sui.list.SetSelectable(false, false)
 					sui.app.SetFocus(sui.inputField)
+					sui.refreshPendingFreshData()
 				}
 			}
 		}
